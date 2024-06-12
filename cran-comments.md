@@ -1,1 +1,1 @@
-This release fixes errors related to the latest PROreg- and tidytable-updates.
+This is a hotfix release that fixes memory allocation issues when `insight::get_datagrid()` was called with the deprecated argument `at = NULL`.

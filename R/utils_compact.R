@@ -30,5 +30,5 @@ compact_list <- function(x, remove_na = FALSE) {
 #'
 #' @export
 compact_character <- function(x) {
-  x[!sapply(x, function(i) nchar(i) == 0 || all(is.na(i)) || any(i == "NULL", na.rm = TRUE))]
+  x[!sapply(x, function(i) !nzchar(i, keepNA = TRUE) || all(is.na(i)) || any(i == "NULL", na.rm = TRUE))]
 }

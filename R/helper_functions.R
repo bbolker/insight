@@ -300,39 +300,6 @@
 
 
 
-
-# checks if a mixed model fit is singular or not. Need own function,
-# because lme4::isSingular() does not work with glmmTMB
-.is_singular <- function(x, vals, tolerance = 1e-5) {
-  check_if_installed("lme4", reason = "to compute variances for mixed models")
-
-  tryCatch(
-    {
-      if (inherits(x, c("glmmTMB", "clmm", "cpglmm"))) {
-        is_si <- any(sapply(vals$vc, function(.x) any(abs(diag(.x)) < tolerance)))
-      } else if (inherits(x, "merMod")) {
-        theta <- lme4::getME(x, "theta")
-        diag.element <- lme4::getME(x, "lower") == 0
-        is_si <- any(abs(theta[diag.element]) < tolerance)
-      } else if (inherits(x, "MixMod")) {
-        vc <- diag(x$D)
-        is_si <- any(sapply(vc, function(.x) any(abs(.x) < tolerance)))
-      } else if (inherits(x, "lme")) {
-        is_si <- any(abs(stats::na.omit(as.numeric(diag(vals$vc))) < tolerance))
-      } else {
-        is_si <- FALSE
-      }
-
-      is_si
-    },
-    error = function(x) {
-      FALSE
-    }
-  )
-}
-
-
-
 # Filter parameters from Stan-model fits
 .filter_pars <- function(l, parameters = NULL, is_mv = NULL) {
   if (!is.null(parameters)) {

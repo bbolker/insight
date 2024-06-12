@@ -202,6 +202,7 @@ test_that("MASS::rlm", {
 # =========================================================================
 
 test_that("get_predicted - lmerMod", {
+  skip_if(getRversion() > "4.3.3")
   suppressWarnings(skip_if_not_installed("glmmTMB"))
   skip_if_not_installed("lme4")
   skip_if_not_installed("merTools")
@@ -266,7 +267,7 @@ test_that("get_predicted - glmer with matrix response", {
     cbind(incidence, size - incidence) ~ period + (1 | herd),
     data = cbpp, family = binomial
   )
-  grid <- get_datagrid(model, at = "period", range = "grid", preserve_range = FALSE)
+  grid <- get_datagrid(model, by = "period", range = "grid", preserve_range = FALSE)
   out <- as.data.frame(get_predicted(model, data = grid, ci = 0.95))
   expect_equal(out$Predicted, c(0.19808, 0.08392, 0.07402, 0.04843), tolerance = 1e-3)
   expect_equal(out$CI_low, c(0.1357, 0.04775, 0.0404, 0.02164), tolerance = 1e-3)
@@ -290,6 +291,7 @@ test_that("get_predicted - lmerMod (log)", {
 
 
 test_that("get_predicted - merMod", {
+  skip_if(getRversion() > "4.3.3")
   skip_if_not_installed("lme4")
   skip_if_not_installed("glmmTMB")
   x <- lme4::glmer(vs ~ am + (1 | cyl), data = mtcars, family = "binomial")
@@ -312,6 +314,7 @@ test_that("get_predicted - merMod", {
 
 
 test_that("get_predicted - glmmTMB", {
+  skip_if(getRversion() > "4.3.3")
   skip_if_not_installed("glmmTMB")
   x <- glmmTMB::glmmTMB(mpg ~ am + (1 | cyl), data = mtcars)
 
@@ -629,6 +632,7 @@ test_that("brms: `type` in ellipsis used to produce the wrong intervals", {
 
 
 test_that("zero-inflation stuff works", {
+  skip_if(getRversion() > "4.3.3")
   skip_if_not_installed("glmmTMB")
   skip_if_not_installed("pscl")
 

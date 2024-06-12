@@ -1,11 +1,52 @@
+# insight 0.20.2
+
+## General
+
+* Improved accuracy of singularity-checks in `get_variance()`.
+
+# insight 0.20.1
+
+## Bug fixes
+
+* Fixed possible memory allocation issues when the deprecated argument `at` was
+  used in `get_datagrid()`.
+
+# insight 0.20.0
+
+## Breaking
+
+* Arguments named `group`, `at`, `group_by` and `split_by` will be deprecated
+  in future releases of _easystats_ packages. Please use `by` instead. This
+  affects following functions in *insight*:
+
+  * `export_table()`
+  * `get_datagrid()`
+  * `print_parameters()`
+
+## Bug fixes
+
+* Fixed errors in CRAN checks.
+
+# insight 0.19.11
+
+## General
+
+* More informative error message for `get_varcov()` when the requested
+  `vcov`-function failed.
+
+## Bug fixes
+
+* Fixed issue with `get_data()` for `coxme` models when `source` was set to
+  `"modelframe"`.
+
 # insight 0.19.10
 
 ## Bug fixes
 
-* Function like `find_variables()` or `clean_names()` now support multi-membership
+* Functions like `find_variables()` or `clean_names()` now support multi-membership
   formulas for models from *brms*.
 
-* Updated tests to work with the latest changes in *glmmTMBM 1.1.9*.
+* Updated tests to work with the latest changes in *glmmTMB 1.1.9*.
 
 # insight 0.19.9
 
