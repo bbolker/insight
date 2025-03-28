@@ -8,6 +8,7 @@
 <url><loc>https://easystats.github.io/insight/articles/export.html</loc></url>
 <url><loc>https://easystats.github.io/insight/articles/index.html</loc></url>
 <url><loc>https://easystats.github.io/insight/articles/insight.html</loc></url>
+<url><loc>https://easystats.github.io/insight/articles/newmodels.html</loc></url>
 <url><loc>https://easystats.github.io/insight/authors.html</loc></url>
 <url><loc>https://easystats.github.io/insight/index.html</loc></url>
 <url><loc>https://easystats.github.io/insight/news/index.html</loc></url>
@@ -21,6 +22,8 @@
 <url><loc>https://easystats.github.io/insight/reference/display.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/dot-colour_detect.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/download_model.html</loc></url>
+<url><loc>https://easystats.github.io/insight/reference/easystats_columns.html</loc></url>
+<url><loc>https://easystats.github.io/insight/reference/efc_insight.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/ellipsis_info.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/export_table.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/find_algorithm.html</loc></url>
@@ -60,6 +63,7 @@
 <url><loc>https://easystats.github.io/insight/reference/get_auxiliary.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_call.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_data.html</loc></url>
+<url><loc>https://easystats.github.io/insight/reference/get_datagrid.emmGrid.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_datagrid.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_deviance.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_df.html</loc></url>
@@ -72,7 +76,7 @@
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.betareg.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.emmGrid.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.gamm.html</loc></url>
-<url><loc>https://easystats.github.io/insight/reference/get_parameters.glmm.html</loc></url>
+<url><loc>https://easystats.github.io/insight/reference/get_parameters.glmmTMB.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.htest.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/get_parameters.zeroinfl.html</loc></url>
@@ -116,5 +120,6 @@
 <url><loc>https://easystats.github.io/insight/reference/standardize_names.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/text_remove_backticks.html</loc></url>
 <url><loc>https://easystats.github.io/insight/reference/trim_ws.html</loc></url>
+<url><loc>https://easystats.github.io/insight/reference/validate_argument.html</loc></url>
 </urlset>
 
