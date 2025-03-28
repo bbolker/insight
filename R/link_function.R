@@ -26,7 +26,6 @@ link_function <- function(x, ...) {
 }
 
 
-
 # Default method ---------------------------
 
 
@@ -36,38 +35,49 @@ link_function.default <- function(x, ...) {
     x <- x$gam
     class(x) <- c(class(x), c("glm", "lm"))
   }
-
-  tryCatch(
-    {
-      # get model family
-      ff <- .gam_family(x)
-
-      # return link function, if exists
-      if ("linkfun" %in% names(ff)) {
-        return(ff$linkfun)
-      }
-
-      # else, create link function from link-string
-      if ("link" %in% names(ff)) {
-        return(match.fun(ff$link))
-      }
-
-      NULL
-    },
-    error = function(x) {
-      NULL
-    }
-  )
+  .extract_generic_linkfun(x)
 }
 
+
+.extract_generic_linkfun <- function(x, default_link = NULL) {
+  # general approach
+  out <- .safe(stats::family(x)$linkfun)
+  # if it fails, try to retrieve from model information
+  if (is.null(out)) {
+    # get model family, consider special gam-case
+    ff <- .gam_family(x)
+    if ("linkfun" %in% names(ff)) {
+      # return link function, if exists
+      out <- ff$linkfun
+    } else if ("link" %in% names(ff) && is.character(ff$link)) {
+      # else, create link function from link-string
+      out <- .safe(stats::make.link(link = ff$link)$linkfun)
+      # or match the function - for "exp()", make.link() won't work
+      if (is.null(out)) {
+        out <- .safe(match.fun(ff$link))
+      }
+    }
+  }
+  # if all fails, force default link
+  if (is.null(out) && !is.null(default_link)) {
+    out <- switch(default_link,
+      identity = .safe(stats::gaussian(link = "identity")$linkfun),
+      .safe(stats::make.link(link = default_link)$linkfun)
+    )
+  }
+  out
+}
 
 
 # Gaussian family ------------------------------------------
 
 #' @export
 link_function.lm <- function(x, ...) {
-  stats::gaussian(link = "identity")$linkfun
+  .extract_generic_linkfun(x, "identity")
 }
+
+#' @export
+link_function.asym <- link_function.lm
 
 #' @export
 link_function.phylolm <- link_function.lm
@@ -171,6 +181,9 @@ link_function.RM <- link_function.lm
 #' @export
 link_function.afex_aov <- link_function.lm
 
+#' @export
+link_function.svy2lme <- link_function.lm
+
 
 # General family ---------------------------------
 
@@ -199,7 +212,7 @@ link_function.nestedLogit <- function(x, ...) {
 
 #' @export
 link_function.multinom <- function(x, ...) {
-  stats::make.link(link = "logit")$linkfun
+  .extract_generic_linkfun(x, "logit")
 }
 
 #' @export
@@ -262,6 +275,14 @@ link_function.riskRegression <- link_function.multinom
 #' @export
 link_function.comprisk <- link_function.multinom
 
+#' @export
+link_function.multinom_weightit <- function(x, ...) {
+  stats::make.link(link = x$family$link)$linkfun
+}
+
+#' @export
+link_function.ordinal_weightit <- link_function.multinom_weightit
+
 
 # Phylo glm ------------------------
 
@@ -296,7 +317,6 @@ link_function.hurdle <- link_function.zeroinfl
 
 #' @export
 link_function.zerotrunc <- link_function.zeroinfl
-
 
 
 # Tobit links ---------------------------------
@@ -351,7 +371,6 @@ link_function.serp <- link_function.clm
 link_function.mixor <- link_function.clm
 
 
-
 # mfx models ------------------------------------------------------
 
 
@@ -402,6 +421,20 @@ link_function.Rchoice <- function(x, ...) {
 
 
 #' @export
+link_function.oohbchoice <- function(x, ...) {
+  link <- switch(x$distribution,
+    normal = "identity",
+    weibull = ,
+    "log-normal" = "log",
+    logistic = ,
+    ## TODO: not sure about log-logistic link-inverse
+    "log-logistic" = "logit"
+  )
+  stats::make.link(link = link)$linkfun
+}
+
+
+#' @export
 link_function.merModList <- function(x, ...) {
   link_function.default(x[[1]], ...)
 }
@@ -416,7 +449,6 @@ link_function.mipo <- function(x, ...) {
 
 #' @export
 link_function.mira <- function(x, ...) {
-  # installed?
   check_if_installed("mice")
   link_function(mice::pool(x), ...)
 }
@@ -471,11 +503,10 @@ link_function.cglm <- function(x, ...) {
   method <- parse(text = safe_deparse(x$call))[[1]]$method
 
   if (!is.null(method) && method == "clm") {
-    link <- "identiy"
+    link <- "identity"
   }
   stats::make.link(link = link)$linkfun
 }
-
 
 
 #' @export
@@ -512,6 +543,9 @@ link_function.bife <- function(x, ...) {
   x$family$linkfun
 }
 
+#' @export
+link_function.glmgee <- link_function.bife
+
 
 #' @export
 link_function.cpglmm <- function(x, ...) {
@@ -531,28 +565,7 @@ link_function.bcplm <- link_function.cpglmm
 
 #' @export
 link_function.gam <- function(x, ...) {
-  lf <- tryCatch(
-    {
-      # get model family
-      ff <- .gam_family(x)
-
-      # return link function, if exists
-      if ("linkfun" %in% names(ff)) {
-        return(ff$linkfun)
-      }
-
-      # else, create link function from link-string
-      if ("link" %in% names(ff)) {
-        return(match.fun(ff$link))
-      }
-
-      NULL
-    },
-    error = function(x) {
-      NULL
-    }
-  )
-
+  lf <- .extract_generic_linkfun(x)
   if (is.null(lf)) {
     mi <- .gam_family(x)
     if (object_has_names(mi, "linfo")) {
@@ -568,19 +581,16 @@ link_function.gam <- function(x, ...) {
 }
 
 
-
 #' @export
 link_function.glimML <- function(x, ...) {
   stats::make.link(link = x@link)$linkfun
 }
 
 
-
 #' @export
 link_function.glmmadmb <- function(x, ...) {
   x$linkfun
 }
-
 
 
 #' @export
@@ -594,21 +604,24 @@ link_function.glmm <- function(x, ...) {
 }
 
 
-
 #' @rdname link_function
 #' @export
 link_function.gamlss <- function(x, what = c("mu", "sigma", "nu", "tau"), ...) {
   what <- match.arg(what)
   faminfo <- get(x$family[1], asNamespace("gamlss"))()
-  switch(what,
-    mu = faminfo$mu.linkfun,
-    sigma = faminfo$sigma.linkfun,
-    nu = faminfo$nu.linkfun,
-    tau = faminfo$tau.linkfun,
-    faminfo$mu.linkfun
-  )
+  # exceptions
+  if (faminfo$family[1] == "LOGNO") {
+    function(mu) log(mu)
+  } else {
+    switch(what,
+      mu = faminfo$mu.linkfun,
+      sigma = faminfo$sigma.linkfun,
+      nu = faminfo$nu.linkfun,
+      tau = faminfo$tau.linkfun,
+      faminfo$mu.linkfun
+    )
+  }
 }
-
 
 
 #' @export
@@ -619,7 +632,6 @@ link_function.gamm <- function(x, ...) {
 }
 
 
-
 #' @export
 link_function.bamlss <- function(x, ...) {
   flink <- stats::family(x)$links[1]
@@ -628,7 +640,6 @@ link_function.bamlss <- function(x, ...) {
     print_colour("\nCould not find appropriate link-function.\n", "red")
   )
 }
-
 
 
 #' @export
@@ -647,7 +658,6 @@ link_function.LORgee <- function(x, ...) {
 
   stats::make.link(link)$linkfun
 }
-
 
 
 #' @export
@@ -692,7 +702,6 @@ link_function.svyolr <- function(x, ...) {
 }
 
 
-
 #' @rdname link_function
 #' @export
 link_function.betareg <- function(x, what = c("mean", "precision"), ...) {
@@ -702,7 +711,6 @@ link_function.betareg <- function(x, what = c("mean", "precision"), ...) {
     precision = x$link$precision$linkfun
   )
 }
-
 
 
 #' @rdname link_function
@@ -720,7 +728,6 @@ link_function.DirichletRegModel <- function(x, what = c("mean", "precision"), ..
 }
 
 
-
 #' @export
 link_function.gbm <- function(x, ...) {
   switch(x$distribution$name,
@@ -736,13 +743,11 @@ link_function.gbm <- function(x, ...) {
 }
 
 
-
 #' @export
 link_function.stanmvreg <- function(x, ...) {
   fam <- stats::family(x)
   lapply(fam, function(.x) .x$linkfun)
 }
-
 
 
 #' @export

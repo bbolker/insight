@@ -16,13 +16,13 @@ trim_ws(x, ...)
 
 n_unique(x, ...)
 
-\method{n_unique}{default}(x, na.rm = TRUE, ...)
+\method{n_unique}{default}(x, remove_na = TRUE, ...)
 
 safe_deparse(x, ...)
 
 safe_deparse_symbol(x)
 
-has_single_value(x, na.rm = FALSE)
+has_single_value(x, remove_na = FALSE, ...)
 }
 \arguments{
 \item{x}{A (character) vector, or for some functions may also be a data frame.}
@@ -32,7 +32,7 @@ has_single_value(x, na.rm = FALSE)
 \item{character_only}{Logical, if \code{TRUE} and \code{x} is a data frame or list,
 only processes character vectors.}
 
-\item{na.rm}{Logical, if missing values should be removed from the input.}
+\item{remove_na}{Logical, if missing values should be removed from the input.}
 }
 \value{
 \itemize{
@@ -54,12 +54,13 @@ would return \code{FALSE}), \code{NULL} is returned.
 Collection of small helper functions. \code{trim_ws()} is an
 efficient function to trim leading and trailing whitespaces from character
 vectors or strings. \code{n_unique()} returns the number of unique values in a
-vector. \code{has_single_value()} is equivalent to \code{n_unique() == 1} but is faster.
-\code{safe_deparse()} is comparable to \code{deparse1()}, i.e. it can safely
-deparse very long expressions into a single string. \code{safe_deparse_symbol()}
-only deparses a substituted expressions when possible, which can be much faster
-than \code{deparse(substitute())} for those cases where \code{substitute()} returns no
-valid object name.
+vector. \code{has_single_value()} is equivalent to \code{n_unique() == 1} but is faster
+(note the different default for the \code{remove_na} argument). \code{safe_deparse()}
+is comparable to \code{deparse1()}, i.e. it can safely deparse very long
+expressions into a single string. \code{safe_deparse_symbol()} only deparses a
+substituted expressions when possible, which can be much faster than
+\code{deparse(substitute())} for those cases where \code{substitute()} returns no valid
+object name.
 }
 \examples{
 trim_ws("  no space!  ")

@@ -57,7 +57,7 @@ is_regression_model <- function(x) {
 
     # a --------------------
     "aareg", "afex_aov", "AKP", "ancova", "anova", "Anova.mlm",
-    "anova.rms", "aov", "aovlist", "Arima", "averaging",
+    "anova.rms", "aov", "aovlist", "Arima", "averaging", "asym",
 
     # b --------------------
     "bamlss", "bamlss.frame", "bayesGAM", "bayesmeta", "bayesx",
@@ -71,7 +71,8 @@ is_regression_model <- function(x) {
     "cch", "censReg", "cgam", "cgamm", "cglm", "clm", "clm2",
     "clmm", "clmm2", "clogit", "coeftest", "complmrob", "comprisk",
     "confusionMatrix", "coxme", "coxph", "coxph.penal", "coxr",
-    "cpglm", "cpglmm", "crch", "crq", "crqs", "crr", "dglm",
+    "cpglm", "cpglmm", "crch", "crq", "crqs", "crr", "cglm",
+    "coxph_weightit",
 
     # d --------------------
     "dep.effect", "deltaMethod", "DirichletRegModel", "drc",
@@ -80,16 +81,17 @@ is_regression_model <- function(x) {
     "eglm", "elm", "emmGrid", "emm_list", "epi.2by2", "ergm",
 
     # f --------------------
-    "feglm", "feis", "felm", "fitdistr", "fixest", "flexmix",
+    "fdm", "feglm", "feis", "felm", "fitdistr", "fixest", "flexmix",
     "flexsurvreg", "flac", "flic",
 
     # g --------------------
     "gam", "Gam", "GAMBoost", "gamlr", "gamlss", "gamm", "gamm4",
     "garch", "gbm", "gee", "geeglm", "gjrm", "glht", "glimML", "Glm", "glm",
-    "glmaag", "glmbb", "glmboostLSS", "glmc", "glmdm", "glmdisc",
+    "glmaag", "glmbb", "glmboostLSS", "glmc", "glmdm", "glmdisc", "glmgee",
     "glmerMod", "glmlep", "glmm", "glmmadmb", "glmmEP", "glmmFit",
     "glmmfields", "glmmLasso", "glmmPQL", "glmmTMB", "glmnet", "glmrob",
     "glmRob", "glmx", "gls", "gmnl", "gmm", "gnls", "gsm", "ggcomparisons",
+    "glm_weightit",
 
     # h --------------------
     "heavyLme", "HLfit", "htest", "hurdle", "hglm",
@@ -118,14 +120,14 @@ is_regression_model <- function(x) {
     "mle", "mle2", "mlergm", "mlm", "mlma", "mlogit", "model_fit",
     "multinom", "mvmeta", "mvord", "mvr", "marginaleffects",
     "marginaleffects.summary", "mblogit", "mclogit", "mmrm", "mmrm_fit",
-    "mmrm_tmb",
+    "mmrm_tmb", "multinom_weightit",
 
     # n --------------------
     "negbin", "negbinmfx", "negbinirr", "nlreg", "nlrq", "nls",
     "nparLD", "nestedLogit",
 
     # o --------------------
-    "objectiveML", "ols", "osrt", "orcutt",
+    "objectiveML", "ols", "osrt", "orcutt", "ordinal_weightit", "oohbchoice",
 
     # p --------------------
     "pairwise.htest", "pb1", "pb2", "pgmm", "plm", "plmm", "PMCMR",
@@ -144,7 +146,7 @@ is_regression_model <- function(x) {
     "Sarlm", "scam", "selection", "sem", "SemiParBIV", "serp", "slm", "speedlm",
     "speedglm", "splmm", "spml", "stanmvreg", "stanreg", "summary.lm",
     "survfit", "survreg", "survPresmooth", "svychisq", "svyglm", "svy_vglm",
-    "svyolr", "svytable", "systemfit",
+    "svyolr", "svytable", "systemfit", "svy2lme", "seqanova.svyglm",
 
     # t --------------------
     "t1way", "t2way", "t3way", "test_mediation", "tobit", "trendPMCMR",
@@ -166,15 +168,12 @@ is_regression_model <- function(x) {
   if (isTRUE(regression_only)) {
     out <- setdiff(out, c(
       "emmGrid", "emm_list", "htest", "pairwise.htest", "summary.lm",
-      "marginaleffects", "marginaleffects.summary"
+      "marginaleffects", "marginaleffects.summary", "ggcomparisons"
     ))
   }
 
   out
 }
-
-
-
 
 
 .get_gam_classes <- function() {

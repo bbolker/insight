@@ -47,7 +47,7 @@
 
 
   # We need to fix a bit here. We have the simulated standard errors and CI's -
-  # but can use the "correct" predictions from "predict(type = "reponse")".
+  # but can use the "correct" predictions from "predict(type = "response")".
   # in order to make CI and predictions match, we take the simulated CI-range
   # and use the original predicted values as "center" for those CI-ranges.
 
@@ -68,9 +68,6 @@
 
   simulated[c("SE", "CI_low", "CI_high")]
 }
-
-
-
 
 
 # glmmTMB -------------------
@@ -107,8 +104,6 @@
 }
 
 
-
-
 # GLMMAdaptive MixMod -------------------
 
 
@@ -141,7 +136,6 @@
     }
   )
 }
-
 
 
 # pscl::zeroinfl ----------------------
@@ -182,9 +176,6 @@
 }
 
 
-
-
-
 # gam --------------------
 
 
@@ -219,7 +210,6 @@
     }
   )
 }
-
 
 
 # helper -----------------

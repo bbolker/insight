@@ -43,7 +43,6 @@
 #'   and `subtitles` may be any length from 1 to same length as returned
 #'   list elements. If `titles` and `subtitles` are shorter than
 #'   existing elements, only the first default attributes are overwritten.
-#' @param split_by Deprecated, please use `by` instead.
 #'
 #' @return
 #'
@@ -110,14 +109,7 @@ print_parameters <- function(x,
                              keep_parameter_column = TRUE,
                              remove_empty_column = FALSE,
                              titles = NULL,
-                             subtitles = NULL,
-                             split_by = NULL) {
-  ## TODO: deprecte later
-  if (!is.null(split_by)) {
-    format_warning("Argument `split_by` is deprecated and will be removed in a future release. Please use `by` instead.") # nolint
-    by <- split_by
-  }
-
+                             subtitles = NULL) {
   obj <- list(...)
 
   # save attributes of original object
@@ -220,7 +212,7 @@ print_parameters <- function(x,
     # we don't need "Effects" and "Component" column any more, and probably
     # also no longer the "Group" column
     columns_to_remove <- c("Effects", "Component", "Cleaned_Parameter")
-    if (n_unique(.group) == 1) {
+    if (has_single_value(.group, remove_na = TRUE)) {
       columns_to_remove <- c(columns_to_remove, "Group")
     } else {
       .group <- NULL

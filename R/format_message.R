@@ -98,10 +98,13 @@ format_message <- function(string,
 #' @param type Type of exception alert to raise.
 #'   Can be `"message"` for `message()`, `"warning"` for `warning()`,
 #'   or `"error"` for `stop()`.
-#' @param call. Logical. Indicating if the call should be included in the the
+#' @param call Logical. Indicating if the call should be included in the the
 #'   error message. This is usually confusing for users when the function
 #'   producing the warning or error is deep within another function, so the
 #'   default is `FALSE`.
+#' @param immediate Logical. Indicating if the *warning* should be printed
+#'   immediately. Only applies to `format_warning()` or `format_alert()` with
+#'   `type = "warning"`. The default is `FALSE`.
 #'
 #' @examplesIf identical(Sys.getenv("NOT_CRAN"), "true")
 #' # message
@@ -121,8 +124,9 @@ format_alert <- function(string,
                          line_length = 0.9 * getOption("width", 80),
                          indent = "  ",
                          type = "message",
-                         call. = FALSE) {
-  type <- match.arg(type, choices = c("message", "warning", "error"))
+                         call = FALSE,
+                         immediate = FALSE) {
+  type <- validate_argument(type, c("message", "warning", "error"))
   if (type == "message") {
     message(format_message(
       string = string, ...,
@@ -132,20 +136,20 @@ format_alert <- function(string,
     warning(format_message(
       string = string, ...,
       line_length = line_length, indent = indent
-    ), call. = call.)
+    ), call. = call, immediate. = immediate)
   } else {
     stop(format_message(
       string = string, ...,
       line_length = line_length, indent = indent
-    ), call. = call.)
+    ), call. = call)
   }
 }
 
 #' @name format_warning
 #' @rdname format_message
 #' @export
-format_warning <- function(...) {
-  format_alert(..., type = "warning")
+format_warning <- function(..., immediate = FALSE) {
+  format_alert(..., type = "warning", immediate = immediate)
 }
 
 #' @name format_error
@@ -154,7 +158,6 @@ format_warning <- function(...) {
 format_error <- function(...) {
   format_alert(..., type = "error")
 }
-
 
 
 # helper -----------------------
@@ -247,14 +250,12 @@ format_error <- function(...) {
 }
 
 
-
 # check whether a string line contains one of the supported format tags
 .find_tokens <- function(string) {
   tokens <- c("{.b ", "{.i ", "{.url ", "{.pkg ")
   matches <- vapply(tokens, grepl, TRUE, string, fixed = TRUE)
-  if (any(matches)) {
-    matches
-  } else {
+  if (!any(matches)) {
     return(NULL)
   }
+  matches
 }

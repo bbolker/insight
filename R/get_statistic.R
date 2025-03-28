@@ -11,30 +11,6 @@
 #'   where the index of the column that is being pulled is `column_index`.
 #'   Defaults to 3, which is the default statistic column for most models'
 #'   summary-output.
-#' @param component String, indicating the model component for which parameters
-#'   should be returned. The default for all models is `"all"`, which returns
-#'   the requested information for all available model components. Furthermore,
-#'   there are specific options depending on the model class. `component` then
-#'   may be one of:
-#'
-#'   - For zero-inflated models (`gmmTMB`, `hurdle`, `zeroinfl`, ...) can also
-#'     be `"conditional"` or `"zero-inflated"`. Note that the *conditional*
-#'     component is also called *count* or *mean* component, depending on the
-#'     model. `glmmTMB` also has a `"dispersion"` component.
-#'   - For models with smooth terms, `component = "smooth_terms"` returns the
-#'     test statistic for the smooth terms.
-#'   - For models of class `mhurdle`, may also be one of  `"conditional"`,
-#'     `"zero_inflated"`, `"infrequent_purchase"` or `"auxiliary"`.
-#'   - For models of class `clm2` or `clmm2`, may also be `"scale"`.
-#'   - For models of class `betareg`, `betaor` or `betamfx`, may also be
-#'     `"precision"`. For other `*mfx` models (`logitmfx`, `betamfx`, ...),
-#'     may also be `"marginal"`.
-#'   - For models of class `mvord`, may also be `"thresholds"` or
-#'     `"correlation"`.
-#'   - For models of class `selection`, may also be `"selection"`, `"outcome"`
-#'     or `"auxiliary"`.
-#'   - For models of class `glmx`, may also be `"extra"`.
-#'   - For models of class `averaging`, may also be `"full"`.
 #' @param robust Logical, if `TRUE`, test statistic based on robust
 #'   standard errors is returned.
 #' @param adjust Character value naming the method used to adjust p-values or
@@ -42,8 +18,11 @@
 #' @param ci Confidence Interval (CI) level. Default to `0.95` (`95%`).
 #'   Currently only applies to objects of class `emmGrid`.
 #' @param ... Currently not used.
+#' @inheritParams find_predictors
 #' @inheritParams get_parameters
 #' @inheritParams get_parameters.emmGrid
+#'
+#' @inheritSection find_predictors Model components
 #'
 #' @return A data frame with the model's parameter names and the related test
 #'   statistic.
@@ -56,7 +35,6 @@
 get_statistic <- function(x, ...) {
   UseMethod("get_statistic")
 }
-
 
 
 # Default models ----------------------------------------------------------
@@ -195,6 +173,38 @@ get_statistic.merModList <- function(x, ...) {
 
 
 #' @export
+get_statistic.asym <- function(x, ...) {
+  cftable <- summary(x)$coef_table
+  out <- data.frame(
+    Parameter = find_parameters(x)$conditional,
+    Statistic = cftable[, "t val."],
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  out <- text_remove_backticks(out)
+  attr(out, "statistic") <- find_statistic(x)
+  out
+}
+
+
+#' @export
+get_statistic.oohbchoice <- function(x, ...) {
+  cftable <- summary(x)$coef
+  out <- data.frame(
+    Parameter = find_parameters(x)$conditional,
+    Statistic = cftable[, "z value"],
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  out <- text_remove_backticks(out)
+  attr(out, "statistic") <- find_statistic(x)
+  out
+}
+
+
+#' @export
 get_statistic.afex_aov <- function(x, ...) {
   out <- data.frame(
     Parameter = rownames(x$anova_table),
@@ -252,7 +262,6 @@ get_statistic.negbin <- get_statistic.default
 
 #' @export
 get_statistic.feis <- get_statistic.default
-
 
 
 # Models with zero-inflation component --------------------------------------
@@ -594,7 +603,6 @@ get_statistic.cgam <- function(x, component = "all", ...) {
 }
 
 
-
 # Survival models ------------------------------------------
 
 
@@ -761,7 +769,6 @@ get_statistic.aareg <- function(x, ...) {
 }
 
 
-
 # Ordinal models --------------------------------------------------
 
 
@@ -793,6 +800,14 @@ get_statistic.clm2 <- function(x, component = "all", ...) {
 
 #' @export
 get_statistic.clmm2 <- get_statistic.clm2
+
+
+#' @export
+get_statistic.ordinal_weightit <- function(x, ...) {
+  out <- get_statistic.default(x, ...)
+  out$Component <- "conditional"
+  out
+}
 
 
 #' @export
@@ -840,7 +855,7 @@ get_statistic.mvord <- function(x, component = "all", ...) {
 
   params <- rbind(params, params_error)
 
-  if (n_unique(params$Response) == 1) {
+  if (has_single_value(params$Response, remove_na = TRUE)) {
     params$Response <- NULL
   }
 
@@ -923,6 +938,26 @@ get_statistic.multinom <- function(x, ...) {
 
 #' @export
 get_statistic.brmultinom <- get_statistic.multinom
+
+#' @export
+get_statistic.multinom_weightit <- function(x, ...) {
+  parms <- get_parameters(x)
+  cs <- suppressWarnings(stats::coef(summary(x)))
+
+  out <- data.frame(
+    Parameter = parms$Parameter,
+    Statistic = as.vector(cs[, 3]),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  if ("Response" %in% colnames(parms)) {
+    out$Response <- parms$Response
+  }
+
+  attr(out, "statistic") <- find_statistic(x)
+  out
+}
 
 
 #' @export
@@ -1028,7 +1063,6 @@ get_statistic.mblogit <- function(x, ...) {
 }
 
 
-
 # mfx models -------------------------------------------------------
 
 #' @export
@@ -1129,6 +1163,26 @@ get_statistic.negbinirr <- get_statistic.logitor
 
 
 #' @export
+get_statistic.glmgee <- function(x, ...) {
+  junk <- utils::capture.output({
+    cs <- suppressWarnings(stats::coef(summary(x, corr = FALSE)))
+  })
+  stat <- stats::na.omit(cs[, "z-value"])
+
+  out <- data.frame(
+    Parameter = names(stat),
+    Statistic = as.vector(stat),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  out <- text_remove_backticks(out)
+  attr(out, "statistic") <- find_statistic(x)
+  out
+}
+
+
+#' @export
 get_statistic.nestedLogit <- function(x, component = "all", verbose = TRUE, ...) {
   cf <- as.data.frame(stats::coef(x))
   out <- as.data.frame(do.call(rbind, lapply(x$models, function(i) stats::coef(summary(i)))))
@@ -1219,7 +1273,6 @@ get_statistic.selection <- function(x, component = "all", ...) {
 
 #' @export
 get_statistic.lavaan <- function(x, ...) {
-  # installed?
   check_if_installed("lavaan")
 
   params <- lavaan::parameterEstimates(x)
@@ -1395,6 +1448,19 @@ get_statistic.ivprobit <- function(x, ...) {
 
 
 #' @export
+get_statistic.svy2lme <- function(x, ...) {
+  out <- data.frame(
+    Parameter = rownames(x$beta),
+    Statistic = as.vector(x$beta / sqrt(diag(x$Vbeta))),
+    stringsAsFactors = FALSE
+  )
+  out <- text_remove_backticks(out)
+  attr(out, "statistic") <- find_statistic(x)
+  out
+}
+
+
+#' @export
 get_statistic.HLfit <- function(x, ...) {
   utils::capture.output(s <- summary(x)) # nolint
 
@@ -1473,8 +1539,8 @@ get_statistic.mipo <- function(x, ...) {
     stringsAsFactors = FALSE
   )
   # check for ordinal-alike models
-  if ("y.level" %in% colnames(s)) {
-    params$Response <- as.vector(s$y.level)
+  if (!is.null(x$pooled) && "y.level" %in% colnames(x$pooled)) {
+    params$Response <- as.vector(x$pooled$y.level)
   }
   out <- text_remove_backticks(params)
   attr(out, "statistic") <- find_statistic(x)
@@ -1600,14 +1666,14 @@ get_statistic.emm_list <- function(x, ci = 0.95, adjust = "none", ...) {
 
 #' @export
 get_statistic.ggcomparisons <- function(x, merge_parameters = FALSE, ...) {
-  estimate_pos <- which(colnames(x) == attr(x, "estimate_name"))
   if (isTRUE(merge_parameters)) {
     params <- get_parameters(x, merge_parameters = TRUE)["Parameter"]
   } else {
-    params <- x[, seq_len(estimate_pos - 1), drop = FALSE]
+    params <- get_parameters(x, merge_parameters = FALSE)[c("Level1", "Level2")]
   }
 
-  stat <- .safe(x[[estimate_pos]] / attributes(x)$standard_error)
+  stat_column <- intersect(colnames(x), c("t", "z", "Statistic"))[1]
+  stat <- x[[stat_column]]
   if (is.null(stat)) {
     return(NULL)
   }
@@ -1684,7 +1750,6 @@ get_statistic.averaging <- function(x, component = "conditional", ...) {
 }
 
 
-
 #' @export
 get_statistic.bayesx <- function(x, ...) {
   out <- data.frame(
@@ -1713,7 +1778,6 @@ get_statistic.Arima <- function(x, ...) {
   attr(out, "statistic") <- find_statistic(x)
   out
 }
-
 
 
 #' @export
@@ -1754,10 +1818,8 @@ get_statistic.wbm <- function(x, ...) {
 get_statistic.wbgee <- get_statistic.wbm
 
 
-
 #' @export
 get_statistic.cpglmm <- function(x, ...) {
-  # installed?
   check_if_installed("cplm")
 
   stats <- cplm::summary(x)$coefs
@@ -1802,7 +1864,6 @@ get_statistic.sem <- function(x, ...) {
 
 #' @export
 get_statistic.cpglm <- function(x, ...) {
-  # installed?
   check_if_installed("cplm")
 
   junk <- utils::capture.output(stats <- cplm::summary(x)$coefficients) # nolint
@@ -1820,10 +1881,8 @@ get_statistic.cpglm <- function(x, ...) {
 }
 
 
-
 #' @export
 get_statistic.zcpglm <- function(x, component = "all", ...) {
-  # installed?
   check_if_installed("cplm")
 
   component <- match.arg(component, choices = c("all", "conditional", "zi", "zero_inflated"))
@@ -1854,7 +1913,6 @@ get_statistic.zcpglm <- function(x, component = "all", ...) {
 }
 
 
-
 #' @export
 get_statistic.manova <- function(x, ...) {
   stats <- as.data.frame(summary(x)$stats)
@@ -1869,7 +1927,6 @@ get_statistic.manova <- function(x, ...) {
   attr(out, "statistic") <- find_statistic(x)
   out
 }
-
 
 
 #' @export
@@ -1892,7 +1949,6 @@ get_statistic.maov <- function(x, ...) {
 }
 
 
-
 #' @export
 get_statistic.MANOVA <- function(x, ...) {
   stats <- as.data.frame(x$WTS)
@@ -1910,7 +1966,6 @@ get_statistic.MANOVA <- function(x, ...) {
 
 #' @export
 get_statistic.RM <- get_statistic.MANOVA
-
 
 
 #' @export
@@ -2002,12 +2057,9 @@ get_statistic.crqs <- get_statistic.crq
 get_statistic.nlrq <- get_statistic.rq
 
 
-
 #' @export
-get_statistic.rqss <- function(x,
-                               component = c("all", "conditional", "smooth_terms"),
-                               ...) {
-  component <- match.arg(component)
+get_statistic.rqss <- function(x, component = "all", ...) {
+  component <- validate_argument(component, c("all", "conditional", "smooth_terms"))
 
   cs <- summary(x)
   stat <- c(as.vector(cs$coef[, "t value"]), as.vector(cs$qsstab[, "F value"]))
@@ -2031,11 +2083,10 @@ get_statistic.rqss <- function(x,
 }
 
 
-
 #' @export
 get_statistic.systemfit <- function(x, ...) {
   cf <- stats::coef(summary(x))
-  f <- find_formula(x)
+  f <- find_formula(x, verbose = FALSE)
 
   system_names <- names(f)
   parameter_names <- row.names(cf)
@@ -2058,7 +2109,6 @@ get_statistic.systemfit <- function(x, ...) {
 }
 
 
-
 #' @export
 get_statistic.bigglm <- function(x, ...) {
   parms <- get_parameters(x)
@@ -2075,7 +2125,6 @@ get_statistic.bigglm <- function(x, ...) {
   attr(out, "statistic") <- find_statistic(x)
   out
 }
-
 
 
 #' @export
@@ -2125,6 +2174,15 @@ get_statistic.crch <- function(x, ...) {
 get_statistic.fixest <- function(x, ...) {
   cs <- summary(x)$coeftable
   params <- get_parameters(x)
+
+  # remove .theta row
+  rn <- rownames(cs)
+  if (!is.null(rn)) {
+    theta_row <- which(rn == ".theta")
+    if (length(theta_row)) {
+      cs <- cs[-theta_row, ]
+    }
+  }
 
   out <- data.frame(
     Parameter = params$Parameter,
@@ -2349,7 +2407,6 @@ get_statistic.DirichletRegModel <- function(x, component = "all", ...) {
 
 #' @export
 get_statistic.glimML <- function(x, ...) {
-  # installed?
   check_if_installed("aod")
 
   parms <- get_parameters(x)

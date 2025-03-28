@@ -28,7 +28,7 @@
   # poisson family --------
 
   poisson_fam <-
-    fitfam %in% c("poisson", "quasipoisson", "genpois", "ziplss") |
+    fitfam %in% c("poisson", "quasipoisson", "genpois", "ziplss", "bell") |
       grepl("poisson", fitfam_lower, fixed = TRUE)
 
 
@@ -56,7 +56,7 @@
       "glm", "gee", "glmmTMB", "glmerMod", "merMod", "stanreg", "MixMod",
       "logistf", "bigglm", "brglm", "feglm", "geeglm", "glmm", "glmmadmb",
       "glmmPQL", "glmrob", "glmRob", "logitmfx", "logitor", "logitr",
-      "mixed", "mixor", "svyglm"
+      "mixed", "mixor", "svyglm", "glmgee"
     )
   )
 
@@ -144,14 +144,14 @@
   # ordinal family --------
 
   is.ordinal <-
-    inherits(x, c("svyolr", "polr", "serp", "clm", "clm2", "clmm", "mixor", "LORgee", "mvord")) |
+    inherits(x, c("svyolr", "polr", "serp", "clm", "clm2", "clmm", "mixor", "LORgee", "mvord", "ordinal_weightit")) |
       fitfam %in% c("cumulative", "ordinal")
 
 
   # multinomial family --------
 
   is.multinomial <-
-    inherits(x, c("gmnl", "mclogit", "mblogit", "mmclogit", "mlogit", "DirichletRegModel", "multinom", "brmultinom")) |
+    inherits(x, c("gmnl", "mclogit", "mblogit", "mmclogit", "mlogit", "DirichletRegModel", "multinom", "brmultinom", "multinom_weightit")) |
       fitfam %in% c("cratio", "sratio", "acat", "multinom", "multinomial", "multinomial2", "dirichlet")
 
 
@@ -345,7 +345,7 @@
     dirichlet_fam || is.ordinal || zero.inf || is.censored || is.survival || is_binomtest ||
     is.categorical || hurdle || is.multinomial || is_chi2test || is_proptest || is_xtab) {
     linear_model <- FALSE
-  } else if (!(fitfam %in% c("Student's-t", "t Family", "gaussian", "Gaussian")) && !grepl("(\\st)$", fitfam)) {
+  } else if (!(fitfam %in% c("Student's-t", "t Family", "gaussian", "Gaussian", "lognormal", "skewnormal")) && !grepl("(\\st)$", fitfam)) {
     linear_model <- FALSE
   }
   if (!linear_model && is.survival && fitfam == "gaussian") {
@@ -466,7 +466,6 @@
 
 
 .classify_BFBayesFactor <- function(x) {
-  # installed?
   check_if_installed("BayesFactor")
 
   if (inherits(x@denominator, "BFcorrelation")) {

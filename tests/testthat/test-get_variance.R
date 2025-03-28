@@ -35,6 +35,16 @@ v4 <- suppressWarnings(get_variance(fm4))
 v5 <- suppressWarnings(get_variance(fm5))
 v6 <- suppressWarnings(get_variance(fm6))
 
+test_that("error for non-mixed", {
+  skip_if_not_installed("glmmTMB")
+  data(mtcars)
+  expect_warning(
+    get_variance(glmmTMB::glmmTMB(mpg ~ gear, data = mtcars)),
+    regex = "This function only works for mixed models"
+  )
+  expect_silent(get_variance(glmmTMB::glmmTMB(mpg ~ gear, data = mtcars), verbose = FALSE))
+})
+
 test_that("get_variance-1", {
   expect_equal(v1$var.intercept,
     c(Subject = 612.10016),
@@ -349,7 +359,6 @@ test_that("random effects CIs, poly slope", {
 })
 
 test_that("fixed effects variance for rank-deficient models, #765", {
-  skip_if(getRversion() > "4.3.3")
   skip_if_not_installed("glmmTMB", minimum_version = "1.1.8")
   set.seed(101)
   dd <- data.frame(

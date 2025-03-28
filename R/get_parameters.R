@@ -8,7 +8,7 @@
 #' - [Estimated marginal means][get_parameters.emmGrid] (**emmeans**)
 #' - [Generalized additive models][get_parameters.gamm] (**mgcv**, **VGAM**, ...)
 #' - [Marginal effects models][get_parameters.betamfx] (**mfx**)
-#' - [Mixed models][get_parameters.glmm] (**lme4**, **glmmTMB**, **GLMMadaptive**, ...)
+#' - [Mixed models][get_parameters.glmmTMB] (**lme4**, **glmmTMB**, **GLMMadaptive**, ...)
 #' - [Zero-inflated and hurdle models][get_parameters.zeroinfl] (**pscl**, ...)
 #' - [Models with special components][get_parameters.betareg] (**betareg**, **MuMIn**, ...)
 #' - [Hypothesis tests][get_parameters.htest] (`htest`)
@@ -46,7 +46,6 @@ get_parameters <- function(x, ...) {
 }
 
 
-
 # Default models ---------------------------------------------
 
 
@@ -82,7 +81,7 @@ get_parameters.default <- function(x, verbose = TRUE, ...) {
           sprintf("Parameters can't be retrieved for objects of class `%s`.", class(x)[1])
         )
       }
-      return(NULL)
+      NULL
     }
   )
 }
@@ -109,8 +108,6 @@ get_parameters.data.frame <- function(x, ...) {
 }
 
 
-
-
 # Special models ---------------------------------------------
 
 
@@ -125,6 +122,14 @@ get_parameters.tobit <- get_parameters.default
 #' @export
 get_parameters.model_fit <- function(x, ...) {
   get_parameters(x$fit, ...)
+}
+
+
+#' @export
+get_parameters.ordinal_weightit <- function(x, ...) {
+  out <- get_parameters.default(x, ...)
+  out$Component <- "conditional"
+  out
 }
 
 
@@ -144,8 +149,8 @@ get_parameters.bfsl <- function(x, ...) {
 
 
 #' @export
-get_parameters.selection <- function(x, component = c("all", "selection", "outcome", "auxiliary"), ...) {
-  component <- match.arg(component)
+get_parameters.selection <- function(x, component = "all", ...) {
+  component <- validate_argument(component, c("all", "selection", "outcome", "auxiliary"))
   s <- summary(x)
   rn <- row.names(s$estimate)
   estimates <- as.data.frame(s$estimate, row.names = FALSE)
@@ -300,8 +305,8 @@ get_parameters.mipo <- function(x, ...) {
     stringsAsFactors = FALSE
   )
   # check for ordinal-alike models
-  if ("y.level" %in% colnames(s)) {
-    out$Response <- as.vector(s$y.level)
+  if (!is.null(x$pooled) && "y.level" %in% colnames(x$pooled)) {
+    out$Response <- as.vector(x$pooled$y.level)
   }
   text_remove_backticks(out)
 }
@@ -309,7 +314,6 @@ get_parameters.mipo <- function(x, ...) {
 
 #' @export
 get_parameters.mira <- function(x, ...) {
-  # installed?
   check_if_installed("mice")
   get_parameters(mice::pool(x), ...)
 }
@@ -355,7 +359,6 @@ get_parameters.glht <- function(x, ...) {
 
 #' @export
 get_parameters.mle2 <- function(x, ...) {
-  # installed?
   check_if_installed("bbmle")
   s <- bbmle::summary(x)
 
@@ -371,7 +374,6 @@ get_parameters.mle2 <- function(x, ...) {
 
 #' @export
 get_parameters.mle <- get_parameters.mle2
-
 
 
 #' @export
@@ -429,6 +431,22 @@ get_parameters.multinom <- function(x, ...) {
 
 
 #' @export
+get_parameters.multinom_weightit <- function(x, ...) {
+  params <- stats::coef(x)
+
+  out <- data.frame(
+    Parameter = gsub("(.*)~(.*)", "\\2", names(params)),
+    Estimate = unname(params),
+    Response = gsub("(.*)~(.*)", "\\1", names(params)),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  text_remove_backticks(out)
+}
+
+
+#' @export
 get_parameters.brmultinom <- get_parameters.multinom
 
 
@@ -461,7 +479,6 @@ get_parameters.mclogit <- function(x, ...) {
 
   text_remove_backticks(out)
 }
-
 
 
 #' @export
@@ -497,7 +514,6 @@ get_parameters.gbm <- function(x, ...) {
 
   text_remove_backticks(params)
 }
-
 
 
 #' @export
@@ -582,10 +598,6 @@ get_parameters.metaplus <- function(x, ...) {
 }
 
 
-
-
-
-
 # SEM models ---------------------------------------------
 
 
@@ -594,7 +606,7 @@ get_parameters.blavaan <- function(x, summary = FALSE, standardize = FALSE, ...)
   if (isTRUE(summary)) {
     return(get_parameters.lavaan(x, standardize = standardize, ...))
   }
-  # installed?
+
   check_if_installed("lavaan")
   check_if_installed("blavaan")
 
@@ -632,10 +644,8 @@ get_parameters.blavaan <- function(x, summary = FALSE, standardize = FALSE, ...)
 }
 
 
-
 #' @export
 get_parameters.lavaan <- function(x, standardize = FALSE, ...) {
-  # installed?
   check_if_installed("lavaan")
 
   if (standardize) {
@@ -661,8 +671,6 @@ get_parameters.lavaan <- function(x, standardize = FALSE, ...) {
 
   text_remove_backticks(params)
 }
-
-
 
 
 # Ordinal models ---------------------------------------------
@@ -699,13 +707,6 @@ get_parameters.bracl <- function(x, ...) {
 }
 
 
-
-
-
-
-
-
-
 # Anova and Standard models --------------------------------------------------
 
 
@@ -722,7 +723,6 @@ get_parameters.aov <- function(x, ...) {
 
   text_remove_backticks(params)
 }
-
 
 
 #' @export
@@ -742,7 +742,6 @@ get_parameters.aovlist <- function(x, ...) {
 }
 
 
-
 #' @export
 get_parameters.manova <- function(x, ...) {
   params <- stats::na.omit(stats::coef(x))
@@ -752,7 +751,7 @@ get_parameters.manova <- function(x, ...) {
   out <- out[c("Parameter", "Estimate", "Response")]
   rownames(out) <- NULL
 
-  pattern <- paste0("(", paste0(paste0(".", unique(out$Response)), collapse = "|"), ")$")
+  pattern <- paste0("(", paste(paste0(".", unique(out$Response)), collapse = "|"), ")$")
   out$Parameter <- gsub(pattern, "", out$Parameter)
 
   text_remove_backticks(out)
@@ -760,7 +759,6 @@ get_parameters.manova <- function(x, ...) {
 
 #' @export
 get_parameters.maov <- get_parameters.manova
-
 
 
 #' @export
@@ -774,8 +772,8 @@ get_parameters.afex_aov <- function(x, ...) {
 
 
 #' @export
-get_parameters.pgmm <- function(x, component = c("conditional", "all"), ...) {
-  component <- match.arg(component)
+get_parameters.pgmm <- function(x, component = "conditional", ...) {
+  component <- validate_argument(component, c("conditional", "all"))
   cs <- stats::coef(summary(x, time.dummies = TRUE, robust = FALSE))
   params <- data.frame(
     Parameter = rownames(cs),
@@ -796,8 +794,6 @@ get_parameters.pgmm <- function(x, component = c("conditional", "all"), ...) {
 }
 
 
-
-
 # utility functions ---------------------------------
 
 
@@ -805,7 +801,6 @@ get_parameters.pgmm <- function(x, component = c("conditional", "all"), ...) {
   sn <- methods::slotNames(x)
   as.data.frame(methods::slot(x, sn[1]))
 }
-
 
 
 .get_armsim_ranef_parms <- function(x) {

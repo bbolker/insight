@@ -19,6 +19,11 @@
 #' find_statistic(m)
 #' @export
 find_statistic <- function(x, ...) {
+  UseMethod("find_statistic")
+}
+
+#' @export
+find_statistic.default <- function(x, ...) {
   # model object check --------------------------------------------------------
 
   # check if the object is a model object; if not, quit early
@@ -86,6 +91,7 @@ find_statistic <- function(x, ...) {
   # t-value objects ----------------------------------------------------------
 
   t.mods <- c(
+    "asym",
     "bayesx", "BBreg", "BBmm", "bcplm", "biglm", "bfsl", "blmerMod",
     "cch", "censReg", "complmrob", "cpglm", "cpglmm", "crq", "crqs",
     "drc",
@@ -95,7 +101,7 @@ find_statistic <- function(x, ...) {
     "HLfit", "hglm",
     "ivreg", "ivFixed", "iv_robust", "ivprobit",
     "lm", "lm_robust", "lm.beta", "lme", "lmerMod", "lmerModLmerTest",
-    "lmodel2", "lmRob", "lmrob", "lqm", "lqmm",
+    "lmodel2", "lmRob", "lmrob", "lqm", "lqmm", "lm_weightit",
     "maxLik", "mixed", "mhurdle", "mlm", "mmrm", "mmrm_fit",
     "mmrm_tmb",
     "nlmerMod", "nlrq", "nls",
@@ -103,6 +109,7 @@ find_statistic <- function(x, ...) {
     "pb1", "pb2", "polr", "phylolm",
     "rlm", "rms", "rlmerMod", "rq", "rqs", "rqss",
     "selection", "speedlm", "spml", "summary.lm", "svyglm", "svyolr", "systemfit",
+    "svy2lme",
     "truncreg",
     "varest",
     "wbm", "wblm",
@@ -116,19 +123,19 @@ find_statistic <- function(x, ...) {
     "betamfx", "betaor", "betareg", "bife", "bifeAPEs", "bglmerMod",
     "boot_test_mediation", "bracl", "brglm", "brglmFit", "brmultinom", "btergm",
     "cglm", "cph", "clm", "clm2", "clmm", "clmm2", "clogit", "coxme", "coxph",
-    "coxr", "crch", "crr",
+    "coxr", "crch", "crr", "coxph_weightit",
     "deltaMethod", "DirichletRegModel",
     "ergm",
     "feglm", "flexsurvreg",
     "gee", "ggcomparisons", "glimML", "glmm", "glmmadmb", "glmmFit", "glmmLasso",
-    "glmmTMB", "glmx", "gmnl",
+    "glmmTMB", "glmx", "gmnl", "glmgee",
     "hurdle",
     "lavaan", "loggammacenslmrob", "logitmfx", "logitor", "logitr", "LORgee", "lrm",
     "margins", "marginaleffects", "marginaleffects.summary", "metaplus", "mixor",
     "MixMod", "mjoint", "mle", "mle2", "mlogit", "mblogit", "mclogit", "mmclogit",
-    "multinom", "mvmeta", "mvord",
+    "multinom", "mvmeta", "mvord", "multinom_weightit",
     "negbin", "negbinmfx", "negbinirr", "nlreg", "nestedLogit",
-    "objectiveML", "orm",
+    "objectiveML", "orm", "ordinal_weightit", "oohbchoice",
     "poissonmfx", "poissonirr", "psm", "probitmfx", "pgmm", "phyloglm",
     "qr", "QRNLMM", "QRLMM",
     "Rchoice", "riskRegression", "robmixglm", "rma", "rma.mv", "rma.uni", "rrvglm",
@@ -174,7 +181,7 @@ find_statistic <- function(x, ...) {
       "bam", "bigglm",
       "cgam", "cgamm",
       "eglm", "emmGrid", "emm_list",
-      "gam", "glm", "Glm", "glmc", "glmerMod", "glmRob", "glmrob",
+      "gam", "glm", "Glm", "glmc", "glmerMod", "glmRob", "glmrob", "glm_weightit",
       "pseudoglm",
       "scam",
       "speedglm"
@@ -342,13 +349,10 @@ find_statistic <- function(x, ...) {
     }
 
     if (any(chi_names %in% col_names)) {
-      return("chi-squared statistic")
+      "chi-squared statistic"
     }
   }
 }
-
-
-
 
 
 # helper ---------------

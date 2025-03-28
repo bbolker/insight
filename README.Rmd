@@ -17,7 +17,7 @@ options(knitr.kable.NA = "", digits = 2, width = 80)
 # insight <img src='man/figures/logo.png' align="right" height="139" />
 
 [![DOI](https://joss.theoj.org/papers/10.21105/joss.01412/status.svg)](https://doi.org/10.21105/joss.01412)
-[![downloads](https://cranlogs.r-pkg.org/badges/insight)](https://cranlogs.r-pkg.org/) [![total](https://cranlogs.r-pkg.org/badges/grand-total/insight)](https://cranlogs.r-pkg.org/) [![status](https://tinyverse.netlify.com/badge/insight)](https://CRAN.R-project.org/package=insight) [![lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)](https://lifecycle.r-lib.org/articles/stages.html)
+[![downloads](https://cranlogs.r-pkg.org/badges/insight)](https://cranlogs.r-pkg.org/) [![total](https://cranlogs.r-pkg.org/badges/grand-total/insight)](https://cranlogs.r-pkg.org/)
 
 **Gain insight into your models!**
 
@@ -27,7 +27,7 @@ When fitting any statistical model, there are many useful pieces of information 
 
 ## Installation
 
-[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/insight)](https://cran.r-project.org/package=insight) [![insight status badge](https://easystats.r-universe.dev/badges/insight)](https://easystats.r-universe.dev) [![R-CMD-check](https://github.com/easystats/insight/workflows/R-CMD-check/badge.svg?branch=main)](https://github.com/easystats/insight/actions)
+[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/insight)](https://cran.r-project.org/package=insight) [![insight status badge](https://easystats.r-universe.dev/badges/insight)](https://easystats.r-universe.dev) [![codecov](https://codecov.io/gh/easystats/insight/branch/main/graph/badge.svg)](https://app.codecov.io/gh/easystats/insight)
 
 The *insight* package is available on CRAN, while its latest development version is available on R-universe (from _rOpenSci_) or GitHub.
 
@@ -182,7 +182,7 @@ In case you want to file an issue or contribute in another way to the package, p
 
 ## List of Supported Models by Class
 
-Currently, `r length(supported_models())` model classes are supported.
+Currently, about `r length(supported_models())` model classes are supported.
 
 ```{r, warning=FALSE, message=FALSE, eval=TRUE}
 supported_models()

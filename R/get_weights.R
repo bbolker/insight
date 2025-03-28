@@ -4,7 +4,7 @@
 #' @description Returns weighting variable of a model.
 #'
 #' @param x A fitted model.
-#' @param na_rm Logical, if `TRUE`, removes possible missing values.
+#' @param remove_na Logical, if `TRUE`, removes possible missing values.
 #' @param null_as_ones Logical, if `TRUE`, will return a vector of `1`
 #'   if no weights were specified in the model (as if the weights were all set
 #'   to 1).
@@ -41,7 +41,7 @@ get_weights <- function(x, ...) {
 
 #' @rdname get_weights
 #' @export
-get_weights.default <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
+get_weights.default <- function(x, remove_na = FALSE, null_as_ones = FALSE, ...) {
   weight_vars <- find_weights(x)
   w <- tryCatch(
     stats::weights(x, ...),
@@ -82,7 +82,7 @@ get_weights.default <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
     w <- NULL
   }
 
-  if (!is.null(w) && anyNA(w) && isTRUE(na_rm)) {
+  if (!is.null(w) && anyNA(w) && isTRUE(remove_na)) {
     w <- w[!is.na(w)]
   }
 
@@ -95,22 +95,21 @@ get_weights.default <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
 
 
 #' @export
-get_weights.brmsfit <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
+get_weights.brmsfit <- function(x, remove_na = FALSE, null_as_ones = FALSE, ...) {
   w <- unique(find_weights(x))
 
   if (!is.null(w)) {
     if (length(w) > 1L) {
       return(get_data(x, verbose = FALSE)[w])
-    } else {
-      w <- get_data(x, verbose = FALSE)[[w]]
     }
+    w <- get_data(x, verbose = FALSE)[[w]]
   }
 
   if (!is.null(w) && all(w == 1L)) {
     w <- NULL
   }
 
-  if (!is.null(w) && anyNA(w) && isTRUE(na_rm)) {
+  if (!is.null(w) && anyNA(w) && isTRUE(remove_na)) {
     w <- stats::na.omit(w)
   }
 
@@ -122,7 +121,6 @@ get_weights.brmsfit <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
 }
 
 
-
 #' @export
 get_weights.btergm <- function(x, null_as_ones = FALSE, ...) {
   x@weights
@@ -130,10 +128,10 @@ get_weights.btergm <- function(x, null_as_ones = FALSE, ...) {
 
 
 #' @export
-get_weights.list <- function(x, na_rm = FALSE, null_as_ones = FALSE, ...) {
+get_weights.list <- function(x, remove_na = FALSE, null_as_ones = FALSE, ...) {
   # For GAMMs
   if ("gam" %in% names(x)) {
-    get_weights(x$gam, na_rm = na_rm, null_as_ones = null_as_ones, ...)
+    get_weights(x$gam, remove_na = remove_na, null_as_ones = null_as_ones, ...)
   } else {
     format_error("Cannot find weights in this object. Please an open an issue!")
   }

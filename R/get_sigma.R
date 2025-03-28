@@ -15,6 +15,7 @@
 #'
 #' @param x A model.
 #' @param ci Scalar, the CI level. The default (`NULL`) returns no CI.
+#' @param ... For internal use.
 #' @inheritParams find_parameters
 #'
 #' @return The residual standard deviation (sigma), or `NULL` if this
@@ -49,8 +50,8 @@
 #' m <- lm(mpg ~ wt + cyl + vs, data = mtcars)
 #' get_sigma(m)
 #' @export
-get_sigma <- function(x, ci = NULL, verbose = TRUE) {
-  s <- .get_sigma(x, verbose = verbose)
+get_sigma <- function(x, ci = NULL, verbose = TRUE, ...) {
+  s <- .get_sigma(x, verbose = verbose, ...)
 
   # Confidence interval for sigma
   ci <- .safe(.get_sigma_ci(x, ci = ci))
@@ -74,12 +75,61 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 # special handling ---------------
 
 
+.get_sigma.glmerMod <- function(x, ...) {
+  check_if_installed("lme4")
+  if (startsWith(stats::family(x)$family, "Negative Binomial(")) {
+    lme4::getME(x, "glmer.nb.theta")
+  } else {
+    stats::sigma(x)
+  }
+}
+
+
+.get_sigma.glmmadmb <- function(x, ...) {
+  check_if_installed("lme4")
+  vc <- lme4::VarCorr(x)
+  s <- attr(vc, "sc")
+  # sanity check
+  if (is.null(s)) {
+    s <- .safe(x$alpha)
+  }
+  s
+}
+
+
+.get_sigma.glmmTMB <- function(x, ...) {
+  # The commented code is what MuMIn returns for sigma for nbinom1 models.
+  # However, I think this is wrong. Nakagawa et al. (2017) used this in their
+  # code because glmmadmb models with nbinom1 family are actually Quasi-Poisson
+  # models (see also Supplement 2). Thus, we revert and just use "sigma()" again.
+  # This will return results for `get_variance()` that are in line with the code
+  # in the Supplement 2 from Nakaawa et al. (2017).
+  # if (stats::family(x)$family == "nbinom1") {
+  #   add_value <- 1
+  # } else {
+  #   add_value <- 0
+  # }
+  # stats::sigma(x) + add_value
+  stats::sigma(x)
+}
+
+
+.get_sigma.merMod <- function(x, ...) {
+  stats::sigma(x)
+}
+
+
+.get_sigma.svy2lme <- function(x, ...) {
+  sqrt(as.vector(x$s2))
+}
+
+
 .get_sigma.model_fit <- function(x, verbose = TRUE, ...) {
   .get_sigma(x$fit, verbose = verbose)
 }
 
 
-.get_sigma.lrm <- function(x, verbose = TRUE, ...) {
+.get_sigma.lrm <- function(x, ...) {
   s <- stats::sigma(x)
   s <- s[length(s)]
   class(s) <- c("insight_aux", class(s))
@@ -87,14 +137,14 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 }
 
 
-.get_sigma.VGAM <- function(x, verbose = TRUE, ...) {
+.get_sigma.VGAM <- function(x, ...) {
   s <- .safe(exp(stats::coef(x)[["(Intercept):2"]]))
   class(s) <- c("insight_aux", class(s))
   s
 }
 
 
-.get_sigma.merModList <- function(x, verbose = TRUE, ...) {
+.get_sigma.merModList <- function(x, ...) {
   s <- suppressWarnings(summary(x))
   s <- s$residError
   class(s) <- c("insight_aux", class(s))
@@ -102,14 +152,14 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 }
 
 
-.get_sigma.summary.lm <- function(x, verbose = TRUE, ...) {
+.get_sigma.summary.lm <- function(x, ...) {
   s <- x$sigma
   class(s) <- c("insight_aux", class(s))
   s
 }
 
 
-.get_sigma.selection <- function(x, verbose = TRUE, ...) {
+.get_sigma.selection <- function(x, ...) {
   s <- unname(stats::coef(x)["sigma"])
   class(s) <- c("insight_aux", class(s))
   s
@@ -117,13 +167,8 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 
 
 .get_sigma.cgam <- function(x, verbose = TRUE, ...) {
-  s <- tryCatch(
-    {
-      sqrt(get_deviance(x, verbose = verbose) / get_df(x, type = "residual", verbose = verbose))
-    },
-    error = function(e) {
-      NULL
-    }
+  s <- .safe(
+    sqrt(get_deviance(x, verbose = verbose) / get_df(x, type = "residual", verbose = verbose))
   )
 
   if (is_empty_object(s)) {
@@ -135,7 +180,7 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 }
 
 
-.get_sigma.cpglmm <- function(x, verbose = TRUE, ...) {
+.get_sigma.cpglmm <- function(x, ...) {
   s <- .safe(stats::deviance(x)[["sigmaML"]])
   if (!is.null(s)) {
     class(s) <- c("insight_aux", class(s))
@@ -144,13 +189,41 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 }
 
 
-.get_sigma.brmsfit <- function(x, verbose = TRUE, ...) {
+.get_sigma.lme <- function(x, ...) {
+  .safe(x$sigma)
+}
+
+
+.get_sigma.geeglm <- function(x, ...) {
+  out <- .safe(stats::sigma(x))
+  if (is.data.frame(out)) {
+    out <- out$Estimate
+  }
+  out
+}
+
+
+.get_sigma.mjoint <- function(x, ...) {
+  .safe(x$coef$sigma2[[1]])
+}
+
+
+.get_sigma.glmmPQL <- function(x, ...) {
+  switch(x$family$family,
+    gaussian = ,
+    Gamma = x$sigma,
+    x$sigma^2
+  )
+}
+
+
+.get_sigma.brmsfit <- function(x, ...) {
   s <- tryCatch(
     {
       dat <- as.data.frame(x)
       sigma_column <- grep("sigma", colnames(dat), fixed = TRUE)
       if (length(sigma_column) == 1) {
-        mean(dat[[sigma_column]][1])
+        mean(dat[[sigma_column]])
       } else if (length(sigma_column)) {
         # if more than one sigma column,
         # there isn't a traditional sigma for the model
@@ -163,8 +236,6 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
       NULL
     }
   )
-
-
   # compute sigma manually ---------------
   if (is_empty_object(s)) {
     # default sigma ---------------
@@ -174,7 +245,12 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
   if (is_empty_object(s)) {
     info <- model_info(x, verbose = FALSE)
     if (!is.null(info) && info$is_mixed) {
-      s <- .safe(sqrt(get_variance_residual(x, verbose = FALSE)))
+      dots <- list(...)
+      # in "get_variance()", we call "get_sigma()" - make sure we avoid
+      # recursion and infinite loops
+      if (!isTRUE(dots$no_recursion)) {
+        s <- .safe(sqrt(get_variance_residual(x, verbose = FALSE)))
+      }
     }
   }
 
@@ -184,7 +260,6 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
   class(s) <- c("insight_aux", class(s))
   s
 }
-
 
 
 # default handling ---------------
@@ -207,18 +282,11 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
   }
 
   if (is_empty_object(s)) {
-    if (is.null(info)) {
-      info <- model_info(x, verbose = FALSE)
-    }
-    if (!is.null(info) && info$is_mixed) {
-      s <- .safe(sqrt(get_variance_residual(x, verbose = FALSE)))
-    }
-  }
-
-  if (is_empty_object(s)) {
-    s <- .safe(
-      sqrt(get_deviance(x, verbose = verbose) / get_df(x, type = "residual", verbose = verbose))
-    )
+    s <- .safe({
+      model_deviance <- get_deviance(x, verbose = verbose)
+      residual_df <- get_df(x, type = "residual", verbose = verbose)
+      sqrt(abs(model_deviance) / residual_df)
+    })
   }
 
   if (is_empty_object(s)) {
@@ -228,7 +296,6 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
   class(s) <- c("insight_aux", class(s))
   s
 }
-
 
 
 # Methods -----------------------------------------------------------------
@@ -249,12 +316,13 @@ get_sigma <- function(x, ci = NULL, verbose = TRUE) {
 }
 
 
+#' @export
+as.double.insight_aux <- function(x, ...) {
+  if (is.null(x) || all(is.na(x)) || all(is.infinite(x)) || !is.numeric(x)) {
+    return(NULL)
+  }
+  mean(x, na.rm = TRUE)
+}
 
 #' @export
-as.numeric.insight_aux <- function(x, ...) {
-  if (is.null(x) || is.na(x) || is.infinite(x)) {
-    return(NULL)
-  } else {
-    mean(x, na.rm = TRUE)
-  }
-}
+as.numeric.insight_aux <- as.double.insight_aux

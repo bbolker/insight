@@ -11,6 +11,26 @@
 #' @param verbose Toggle warnings.
 #' @param dichotomies Logical, if model is a `nestedLogit` objects, returns
 #' the formulas for the dichotomies.
+#' @param checks Indicates what kind of checks are conducted when checking
+#' the formula notation. Currently, four different formula specification that
+#' can result in unexpected behaviour of downstream-functions are checked.
+#' `checks` can be one or more of:
+#'
+#' - `"dollar"`: Check if formula contains data name with "$", e.g. `mtcars$am`.
+#' - `"T"`: Check if formula contains poly-term with "raw=T", e.g.
+#'   `poly(x, 2, raw=T)`. In this case, `all.vars()` returns `T` as variable,
+#'   which is not intended.
+#' - `"index"`: Check if formula contains indexed data frames as response
+#'   variable (e.g., `df[, 5] ~ x`).
+#' - `"name"`: Check if syntactically invalid variable names were used and
+#'   quoted in backticks.
+#' - `"all"`: Checks all of the above mentioned options.
+#'
+#' @param action Should a message, warning or error be given for an invalid
+#' formula? Must be one of `"message"`, `"warning"` (default) or `"error"`.
+#' @param prefix_msg Optional string that will be added to the warning/error
+#' message. This can be used to add additional information, e.g. about the
+#' specific function that was calling `formula_ok()` and failed.
 #' @param ... Currently not used.
 #' @inheritParams find_predictors
 #'
@@ -55,6 +75,9 @@
 #'    **DirichletReg**, when parametrization (i.e. `model`) is
 #'    `"alternative"`.
 #'
+#'  - `bidrange`, for models of class `oohbchoice` (from package **DCchoice**),
+#'    which indicates the right-hand side of the bar (the bid-range).
+#'
 #' @note For models of class `lme` or `gls` the correlation-component
 #'   is only returned, when it is explicitly defined as named argument
 #'   (`form`), e.g. `corAR1(form = ~1 | Mare)`
@@ -74,23 +97,67 @@ find_formula <- function(x, ...) {
 }
 
 
-
 #' @rdname find_formula
 #' @export
-formula_ok <- function(x, verbose = TRUE, ...) {
-  f <- find_formula(x, verbose = FALSE)
+formula_ok <- function(x,
+                       checks = "all",
+                       action = "warning",
+                       prefix_msg = NULL,
+                       verbose = TRUE,
+                       ...) {
+  # if a model, retrieve formula. else, treat x as formula
+  if (is_model(x)) {
+    f <- find_formula(x, verbose = FALSE)
+  } else {
+    f <- x
+  }
+
+  check_1 <- check_2 <- check_3 <- check_4 <- TRUE
+  valid_options <- c("all", "dollar", "T", "index", "name")
+
+  # validate args
+  action <- validate_argument(action, c("message", "warning", "error"))
+
+  if (is.null(checks)) {
+    checks <- "all"
+  }
+  if (!all(checks %in% valid_options)) {
+    invalid <- setdiff(checks, valid_options)
+    format_error(paste0(
+      "Argument `checks` contained invalid options: ",
+      toString(invalid),
+      ". Please use one or more of ",
+      toString(valid_options),
+      "."
+    ))
+  }
 
   # check if formula contains data name with "$". This may
   # result in unexpected behaviour, and we should warn users
-  check_1 <- .check_formula_for_dollar(f, verbose = verbose)
+  if (all(checks == "all") || "dollar" %in% checks) {
+    check_1 <- .check_formula_for_dollar(f, action, prefix_msg, verbose = verbose)
+  }
 
   # check if formula contains poly-term with "raw=T". In this case,
   # all.vars() returns "T" as variable, which is not intended
-  check_2 <- .check_formula_for_T(f, verbose = verbose)
+  if (all(checks == "all") || "T" %in% checks) {
+    check_2 <- .check_formula_for_T(f, action, prefix_msg, verbose = verbose)
+  }
 
-  all(check_1 && check_2)
+  # check if formula contains index data frames as response variable
+  # this may result in unexpected behaviour, and we should warn users
+  if (all(checks == "all") || "index" %in% checks) {
+    check_3 <- .check_formula_index_df(f, x, action, prefix_msg, verbose = verbose)
+  }
+
+  # check if formula contains non-syntactic variable names and uses backticks
+  # this may result in unexpected behaviour, and we should warn users
+  if (all(checks == "all") || "name" %in% checks) {
+    check_4 <- .check_formula_backticks(f, action, prefix_msg, verbose = verbose)
+  }
+
+  all(check_1 && check_2 && check_3 && check_4)
 }
-
 
 
 # Default method -----------------------------------
@@ -99,6 +166,33 @@ formula_ok <- function(x, verbose = TRUE, ...) {
 #' @export
 find_formula.default <- function(x, verbose = TRUE, ...) {
   f <- .safe(list(conditional = stats::formula(x)))
+  .find_formula_return(f, verbose = verbose)
+}
+
+
+#' @export
+find_formula.asym <- function(x, verbose = TRUE, ...) {
+  modified_f <- safe_deparse(stats::formula(x))
+  # limitation: we can't preserve "*" and ":"
+  modified_f <- gsub("*", "+", modified_f, fixed = TRUE)
+  modified_f <- gsub(":", "+", modified_f, fixed = TRUE)
+  # explanation:
+  # - gsub("\\+\\s*minus__[^\\+]+", "", input_string):
+  #   This regular expression matches and removes any term that starts with
+  #   + minus__ followed by any characters that are not a +.
+  # - gsub("\\s*\\+\\s*$", "", output_string):
+  #   This removes any trailing plus sign and whitespace that might be left
+  #   at the end of the string.
+  output_string <- gsub("\\+\\s*minus__[^\\+]+", "", modified_f)
+  output_string <- gsub("\\s*(\\+|\\*)\\s*$", "", output_string) # Remove trailing plus sign if any
+  # explanation:
+  # - gsub("lag_([a-zA-Z]+)_", "lag(\\1)", input_string):
+  #   This regular expression matches the pattern "lag_", followed by one or
+  #   more letters (captured in a group), followed by "_". It replaces this
+  #   pattern with "lag(", the captured group, and ")".
+  output_string <- gsub("lag_([a-zA-Z]+)_", "lag(\\1)", output_string)
+  output_string <- gsub("plus__", "", output_string, fixed = TRUE)
+  f <- .safe(list(conditional = stats::as.formula(output_string)))
   .find_formula_return(f, verbose = verbose)
 }
 
@@ -134,7 +228,7 @@ find_formula.data.frame <- function(x, verbose = TRUE, ...) {
 find_formula.aovlist <- function(x, verbose = TRUE, ...) {
   f <- attr(x, "terms", exact = TRUE)
   attributes(f) <- NULL
-  .find_formula_return(list(conditional = f))
+  .find_formula_return(list(conditional = f), verbose = verbose)
 }
 
 
@@ -167,9 +261,23 @@ find_formula.gam <- function(x, verbose = TRUE, ...) {
           ziplss = list(conditional = f[[1]], zero_inflated = f[[2]]),
           # handle formula for location-scale models
           gaulss = list(conditional = f[[1]], scale = f[[2]]),
-          # handle formula for multivariate models
+          # handle formula for multivariate models, or for multinomial models,
+          # which also contain a list of formulas
+          multinom = {
+            y <- safe_deparse(f[[1]][[2]])
+            f <- lapply(f, function(.i) {
+              f_cond <- .i
+              if (length(f_cond) < 3) {
+                f_cond <- stats::as.formula(paste(y, safe_deparse(f_cond)))
+              }
+              list(conditional = f_cond)
+            })
+            names(f) <- rep_len(y, length(f))
+            attr(f, "is_mv") <- "1"
+            f
+          },
           `Multivariate normal` = {
-            r <- lapply(f, function(.i) deparse(.i[[2]]))
+            r <- lapply(f, function(.i) safe_deparse(.i[[2]]))
             f <- lapply(f, function(.i) list(conditional = .i))
             names(f) <- r
             attr(f, "is_mv") <- "1"
@@ -268,7 +376,6 @@ find_formula.gamm <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # Meta-Analysis -----------------------
 
 #' @export
@@ -316,8 +423,6 @@ find_formula.meta_bma <- find_formula.meta_random
 find_formula.deltaMethod <- find_formula.meta_random
 
 
-
-
 # Other models ----------------------------------------------
 
 
@@ -359,7 +464,7 @@ find_formula.systemfit <- function(x, verbose = TRUE, ...) {
   if (length(f) > 1L) {
     attr(f, "is_mv") <- "1"
   }
-  .find_formula_return(f)
+  .find_formula_return(f, verbose = verbose)
 }
 
 
@@ -467,14 +572,17 @@ find_formula.averaging <- function(x, verbose = TRUE, ...) {
 
 #' @export
 find_formula.glht <- function(x, verbose = TRUE, ...) {
-  .find_formula_return(list(conditional = stats::formula(x$model)))
+  .find_formula_return(list(conditional = stats::formula(x$model)), verbose = verbose)
 }
 
 
 #' @export
 find_formula.joint <- function(x, verbose = TRUE, ...) {
   f <- stats::formula(x)
-  .find_formula_return(list(conditional = f$lformula, survival = f$sformula))
+  .find_formula_return(
+    list(conditional = f$lformula, survival = f$sformula),
+    verbose = verbose
+  )
 }
 
 
@@ -526,7 +634,7 @@ find_formula.afex_aov <- function(x, verbose = TRUE, ...) {
     id <- attr(x, "id")
 
     within_variables <- names(attr(x, "within"))
-    within_variables <- paste0(within_variables, collapse = "*")
+    within_variables <- paste(within_variables, collapse = "*")
     within_variables <- paste0("(", within_variables, ")")
     e <- paste0("Error(", id, "/", within_variables, ")")
 
@@ -536,7 +644,7 @@ find_formula.afex_aov <- function(x, verbose = TRUE, ...) {
       between <- as.character(tempf)[3]
       between <- paste0("(", between, ")")
 
-      within_variables <- paste0(c(within_variables, between), collapse = "*")
+      within_variables <- paste(c(within_variables, between), collapse = "*")
     }
 
     out <- list(conditional = stats::formula(paste0(dv, "~", within_variables, "+", e)))
@@ -548,7 +656,7 @@ find_formula.afex_aov <- function(x, verbose = TRUE, ...) {
 
 #' @export
 find_formula.mira <- function(x, verbose = TRUE, ...) {
-  .find_formula_return(find_formula(x$analyses[[1]]))
+  .find_formula_return(find_formula(x$analyses[[1]]), verbose = verbose)
 }
 
 
@@ -573,6 +681,9 @@ find_formula.gee <- function(x, verbose = TRUE, ...) {
   )
   .find_formula_return(f, verbose = verbose)
 }
+
+#' @export
+find_formula.glmgee <- find_formula.gee
 
 
 #' @export
@@ -665,7 +776,6 @@ find_formula.cglm <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # mfx models ---------------------------------------
 
 #' @export
@@ -696,7 +806,6 @@ find_formula.poissonirr <- find_formula.logitmfx
 
 #' @export
 find_formula.probitmfx <- find_formula.logitmfx
-
 
 
 # Panel data models ---------------------------------------
@@ -890,6 +999,22 @@ find_formula.fixest <- function(x, verbose = TRUE, ...) {
 
 
 #' @export
+find_formula.oohbchoice <- function(x, verbose = TRUE, ...) {
+  f <- safe_deparse(stats::formula(x))
+  f_parts <- trim_ws(unlist(strsplit(f, "|", fixed = TRUE), use.names = FALSE))
+
+  f.cond <- f_parts[1]
+  f.bidrange <- f_parts[2]
+
+  f <- compact_list(list(
+    conditional = stats::as.formula(f.cond),
+    bidrange = stats::as.formula(paste("~", f.bidrange))
+  ))
+  .find_formula_return(f, verbose = verbose)
+}
+
+
+#' @export
 find_formula.feis <- function(x, verbose = TRUE, ...) {
   f <- safe_deparse(stats::formula(x))
   f_parts <- unlist(strsplit(f, "(?<!\\()\\|(?![\\w\\s\\+\\(~]*[\\)])", perl = TRUE), use.names = FALSE)
@@ -1033,7 +1158,6 @@ find_formula.zcpglm <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # Ordinal models  --------------------------------------
 
 #' @export
@@ -1097,9 +1221,8 @@ find_formula.DirichletRegModel <- function(x, verbose = TRUE, ...) {
     names(out)[2] <- "precision"
   }
 
-  .find_formula_return(out)
+  .find_formula_return(out, verbose = verbose)
 }
-
 
 
 # Mixed models -----------------------
@@ -1110,6 +1233,7 @@ find_formula.glmmTMB <- function(x, verbose = TRUE, ...) {
   f.zi <- stats::formula(x, component = "zi")
   f.disp <- stats::formula(x, component = "disp")
 
+  # check for "empty" formulas
   if (identical(safe_deparse(f.zi), "~0") || identical(safe_deparse(f.zi), "~1")) {
     f.zi <- NULL
   }
@@ -1118,7 +1242,7 @@ find_formula.glmmTMB <- function(x, verbose = TRUE, ...) {
     f.disp <- NULL
   }
 
-
+  # extract random parts of formula
   f.random <- lapply(.findbars(f.cond), function(.x) {
     f <- safe_deparse(.x)
     stats::as.formula(paste0("~", f))
@@ -1140,16 +1264,30 @@ find_formula.glmmTMB <- function(x, verbose = TRUE, ...) {
     f.zirandom <- f.zirandom[[1]]
   }
 
+  f.disprandom <- lapply(.findbars(f.disp), function(.x) {
+    f <- safe_deparse(.x)
+    if (f == "NULL") {
+      return(NULL)
+    }
+    stats::as.formula(paste0("~", f))
+  })
 
+  if (length(f.disprandom) == 1L) {
+    f.disprandom <- f.disprandom[[1]]
+  }
+
+  # extract fixed effects parts
   f.cond <- stats::as.formula(.get_fixed_effects(f.cond))
   if (!is.null(f.zi)) f.zi <- stats::as.formula(.get_fixed_effects(f.zi))
+  if (!is.null(f.disp)) f.disp <- stats::as.formula(.get_fixed_effects(f.disp))
 
   f <- compact_list(list(
     conditional = f.cond,
     random = f.random,
     zero_inflated = f.zi,
     zero_inflated_random = f.zirandom,
-    dispersion = f.disp
+    dispersion = f.disp,
+    dispersion_random = f.disprandom
   ))
   .find_formula_return(f, verbose = verbose)
 }
@@ -1236,6 +1374,9 @@ find_formula.cgamm <- find_formula.merMod
 
 #' @export
 find_formula.coxme <- find_formula.merMod
+
+#' @export
+find_formula.svy2lme <- find_formula.merMod
 
 #' @export
 find_formula.HLfit <- find_formula.merMod
@@ -1474,7 +1615,7 @@ find_formula.stanmvreg <- function(x, verbose = TRUE, ...) {
   f <- stats::formula(x)
   mv_formula <- lapply(f, .get_stanmv_formula)
   attr(mv_formula, "is_mv") <- "1"
-  .find_formula_return(mv_formula)
+  .find_formula_return(mv_formula, verbose = verbose)
 }
 
 
@@ -1530,7 +1671,6 @@ find_formula.BFBayesFactor <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # tidymodels --------------------------------------------------------------
 
 #' @export
@@ -1562,8 +1702,10 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
   f_mu <- f$pforms$mu
   f_nu <- f$pforms$nu
   f_shape <- f$pforms$shape
+  f_alpha <- f$pforms$alpha
   f_beta <- f$pforms$beta
   f_phi <- f$pforms$phi
+  f_xi <- f$pforms$xi
   f_hu <- f$pforms$hu
   f_ndt <- f$pforms$ndt
   f_zoi <- f$pforms$zoi
@@ -1571,6 +1713,30 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
   f_kappa <- f$pforms$kappa
   f_bias <- f$pforms$bias
   f_bs <- f$pforms$bs
+
+  # brms formulas can also have custom names, based on variable names, e.g.:
+  # brm(
+  #   bf(carb ~ gear * vs) + lf(disc ~ 0 + mo(cyl)),
+  #   data = mtcars,
+  #   family = cumulative("probit"),
+  # )
+  # the lf() part is in "f$pforms" with name "disc".
+  #
+  # we therefore need to check whether we have additional names not yet covered
+  # by the above exceptions.
+
+  # auxiliary names
+  auxiliary_names <- .brms_aux_elements()
+
+  # check if any further pforms exist
+  if (all(names(f$pforms) %in% auxiliary_names)) {
+    f_custom <- NULL
+  } else {
+    custom_names <- setdiff(names(f$pforms), auxiliary_names)
+    if (length(custom_names)) {
+      f_custom <- f$pforms[custom_names]
+    }
+  }
 
   f_sigmarandom <- NULL
   f_betarandom <- NULL
@@ -1627,7 +1793,7 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
   }
 
 
-  compact_list(list(
+  compact_list(c(list(
     conditional = f_cond,
     random = f_random,
     zero_inflated = f_zi,
@@ -1647,7 +1813,7 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
     zero_one_inflated = f_zoi,
     conditional_one_inflated = f_coi,
     kappa = f_kappa
-  ))
+  ), f_custom))
 }
 
 
@@ -1669,7 +1835,6 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
     random = f_random
   ))
 }
-
 
 
 # Find formula for zero-inflated regressions, where
@@ -1701,7 +1866,7 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
       if (as.character(zi.form[2]) == ".") {
         resp <- safe_deparse(c.form[2])
         pred <- setdiff(colnames(.recover_data_from_environment(x)), resp)
-        zi.form <- stats::as.formula(paste(resp, "~", paste0(pred, collapse = " + ")))
+        zi.form <- stats::as.formula(paste(resp, "~", paste(pred, collapse = " + ")))
       }
       zi.form
     },
@@ -1716,7 +1881,6 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # try to guess "full" formula for dot-abbreviation, e.g.
 # lm(mpg ~., data = mtcars)
 .dot_formula <- function(f, model) {
@@ -1726,7 +1890,7 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
       if (as.character(f[[3]])[1] == ".") {
         resp <- safe_deparse(f[[2]])
         pred <- setdiff(colnames(.recover_data_from_environment(model)), resp)
-        f <- stats::as.formula(paste(resp, "~", paste0(pred, collapse = " + ")))
+        f <- stats::as.formula(paste(resp, "~", paste(pred, collapse = " + ")))
       }
       f
     },
@@ -1770,7 +1934,6 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 # Helpers and Methods -----------------------------------------------------
 
 .find_formula_return <- function(f, verbose = TRUE) {
@@ -1778,20 +1941,13 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
     return(NULL)
   }
 
-  # check if formula contains data name with "$". This may
-  # result in unexpected behaviour, and we should warn users
-  .check_formula_for_dollar(f, verbose = verbose)
-
-  # check if formula contains poly-term with "raw=T". In this case,
-  # all.vars() returns "T" as variable, which is not intended
-  .check_formula_for_T(f, verbose = verbose)
-
+  formula_ok(f, verbose = verbose)
   class(f) <- c("insight_formula", class(f))
   f
 }
 
 
-.check_formula_for_T <- function(f, verbose = TRUE) {
+.check_formula_for_T <- function(f, action = "warning", prefix_msg = NULL, verbose = TRUE) {
   f <- safe_deparse(f[[1]])
 
   if (is_empty_object(f)) {
@@ -1800,10 +1956,12 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
 
   if (grepl("(.*)poly\\((.*),\\s*raw\\s*=\\s*T\\)", f)) {
     if (verbose) {
-      format_warning(
+      msg <- c(
+        prefix_msg,
         "Looks like you are using `poly()` with \"raw = T\". This results in unexpected behaviour, because `all.vars()` considers `T` as variable.", # nolint
         "Please use \"raw = TRUE\"."
       )
+      format_alert(msg, type = action)
     }
     return(FALSE)
   }
@@ -1815,7 +1973,7 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
 # in various functions throughout the easystats packages. We warn the user
 # here...
 
-.check_formula_for_dollar <- function(f, verbose = TRUE) {
+.check_formula_for_dollar <- function(f, action = "warning", prefix_msg = NULL, verbose = TRUE) {
   if (is_empty_object(f)) {
     return(TRUE)
   }
@@ -1826,10 +1984,68 @@ find_formula.model_fit <- function(x, verbose = TRUE, ...) {
       format_error(attributes(fc)$condition$message)
     }
     if (verbose) {
-      format_warning(paste0(
-        "Using `$` in model formulas can produce unexpected results. Specify your model using the `data` argument instead.", # nolint
-        "\n  Try: ", fc$formula, ", data = ", fc$data
-      ))
+      msg <- c(
+        prefix_msg,
+        paste0(
+          "Using `$` in model formulas can produce unexpected results. Specify your model using the `data` argument instead.", # nolint
+          "\n  Try: ", fc$formula, ", data = ", fc$data
+        )
+      )
+      format_alert(msg, type = action)
+    }
+    return(FALSE)
+  }
+  return(TRUE)
+}
+
+
+# formulas with an index data frame, like "lm(mtcars[, "mpg"] ~ mtcars$hp), may
+# cause problems in various functions throughout the easystats packages. We
+# warn the user here...
+
+.check_formula_index_df <- function(f, x, action = "warning", prefix_msg = NULL, verbose = TRUE) {
+  if (is_empty_object(f)) {
+    return(TRUE)
+  }
+  resp <- .safe(safe_deparse(f$conditional[[2]]))
+  if (!is.null(resp) && any(grepl("\\b\\w+\\[.*?,.*?\\]", resp))) {
+    if (verbose) {
+      msg <- c(
+        prefix_msg,
+        "Using indexed data frames, such as `df[, 5]`, as model response can produce unexpected results. Specify your model using the literal name of the response variable instead." # nolint
+      )
+      format_alert(msg, type = action)
+    }
+    return(FALSE)
+  }
+  return(TRUE)
+}
+
+
+# formulas with non-syntactic names, where backticks are used, may cause
+# problems. warn user here
+
+.check_formula_backticks <- function(f, action = "warning", prefix_msg = NULL, verbose = TRUE) {
+  if (is_empty_object(f)) {
+    return(TRUE)
+  }
+  resp <- .safe(safe_deparse(f$conditional))
+  if (!is.null(resp) && any(grepl("`", resp, fixed = TRUE))) {
+    if (verbose) {
+      bad_name <- gsub("(.*)`(.*)`(.*)", "\\2", resp)
+      msg <- c(
+        prefix_msg,
+        paste0(
+          "Looks like you are using syntactically invalid variable names, quoted in backticks: `",
+          bad_name,
+          "`. This may result in unexpected behaviour. Please rename your variables (e.g., `",
+          make.names(bad_name),
+          "` instead of `",
+          bad_name,
+          "`) and fit the model again."
+        )
+      )
+      format_alert(msg, type = action)
     }
     return(FALSE)
   }

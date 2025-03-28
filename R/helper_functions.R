@@ -1,6 +1,10 @@
 # small wrapper around this commonly used try-catch
 .safe <- function(code, on_error = NULL) {
-  tryCatch(code, error = function(e) on_error)
+  if (isTRUE(getOption("easystats_errors", FALSE)) && is.null(on_error)) {
+    code
+  } else {
+    tryCatch(code, error = function(e) on_error)
+  }
 }
 
 
@@ -118,14 +122,14 @@
 }
 
 
-
 # extract random effects from formula
 .get_model_random <- function(f, model, split_nested = FALSE) {
   is_special <- inherits(
     model,
     c(
       "MCMCglmm", "gee", "LORgee", "mixor", "clmm2", "felm", "feis", "bife",
-      "BFBayesFactor", "BBmm", "glimML", "MANOVA", "RM", "cglm", "glmm"
+      "BFBayesFactor", "BBmm", "glimML", "MANOVA", "RM", "cglm", "glmm",
+      "glmgee"
     )
   )
 
@@ -190,7 +194,6 @@
 }
 
 
-
 # in case we need the random effects terms as formula (symbol),
 # not as character string, then call this functions instead of
 # .get_model_random()
@@ -215,20 +218,18 @@
 }
 
 
-
 # helper to access model components ----------------
-
 
 .all_elements <- function() {
   c(
     "conditional", "conditional1", "conditional2", "conditional3", "precision",
     "nonlinear", "random", "zi", "zero_inflated", "zero_inflated_random", "shape",
-    "dispersion", "instruments", "interactions", "simplex", "smooth_terms",
-    "sigma", "nu", "tau", "correlation", "slopes", "cluster", "extra", "scale",
-    "marginal", "alpha", "beta", "survival", "infrequent_purchase", "auxiliary",
-    "mix", "shiftprop", "phi", "ndt", "hu", "xi", "coi", "zoi", "aux", "dist",
-    "selection", "outcome", "time_dummies", "sigma_random", "beta_random", "car",
-    "nominal"
+    "dispersion", "dispersion_random", "instruments", "interactions", "simplex",
+    "smooth_terms", "sigma", "nu", "tau", "correlation", "slopes", "cluster",
+    "extra", "scale", "marginal", "alpha", "beta", "survival", "infrequent_purchase",
+    "auxiliary", "mix", "shiftprop", "phi", "ndt", "hu", "xi", "coi", "zoi",
+    "aux", "dist", "selection", "outcome", "time_dummies", "sigma_random",
+    "beta_random", "car", "nominal", "bidrange", "mu", "kappa", "bias"
   )
 }
 
@@ -236,14 +237,20 @@
   c(
     "sigma", "alpha", "beta", "dispersion", "precision", "nu", "tau", "shape",
     "phi", "(phi)", "ndt", "hu", "xi", "coi", "zoi", "mix", "shiftprop", "auxiliary",
-    "aux", "dist",
-
+    "aux", "dist", "mu", "kappa", "bias",
     # random parameters
-    "sigma_random", "beta_random"
+    "dispersion_random", "sigma_random", "beta_random"
   )
 }
 
-.get_elements <- function(effects, component) {
+.brms_aux_elements <- function() {
+  c(
+    "sigma", "mu", "nu", "shape", "beta", "phi", "hu", "ndt", "zoi", "coi",
+    "kappa", "bias", "bs", "zi", "alpha", "xi"
+  )
+}
+
+.get_elements <- function(effects, component, model = NULL) {
   # all elements of a model
   elements <- .all_elements()
 
@@ -254,7 +261,7 @@
   auxiliary_parameters <- .aux_elements()
 
   # random parameters
-  random_parameters <- c("random", "zero_inflated_random", "sigma_random", "beta_random", "car")
+  random_parameters <- c("random", "zero_inflated_random", "dispersion_random", "sigma_random", "beta_random", "car")
 
   # conditional component
   conditional_component <- setdiff(
@@ -279,6 +286,13 @@
     return(auxiliary_parameters)
   }
 
+  # if we have brms-models with custom formulas, we have element-names
+  # that are not covered by the standard elements. We then just do not
+  # filter elements.
+  if (inherits(model, "brmsfit") && component == "all") {
+    f <- insight::find_formula(model, verbose = FALSE)
+    elements <- unique(c(elements, names(f)))
+  }
 
   elements <- switch(effects,
     all = elements,
@@ -297,7 +311,6 @@
 
   elements
 }
-
 
 
 # Filter parameters from Stan-model fits
@@ -320,7 +333,6 @@
 }
 
 
-
 .filter_pars_univariate <- function(l, parameters) {
   lapply(l, function(component) {
     unlist(sapply(
@@ -334,12 +346,10 @@
 }
 
 
-
 # remove column
 .remove_column <- function(data, variables) {
   data[, -which(colnames(data) %in% variables), drop = FALSE]
 }
-
 
 
 .grep_smoothers <- function(x) {
@@ -359,34 +369,15 @@
 }
 
 
-
 .grep_zi_smoothers <- function(x) {
-  grepl("^(s\\.\\d\\()", x, perl = TRUE) |
-    grepl("^(gam::s\\.\\d\\()", x, perl = TRUE) |
-    grepl("^(mgcv::s\\.\\d\\()", x, perl = TRUE)
+  # this one captures smoothers in zi- or mv-models from gam
+  grepl("^(s\\.\\d\\()", x) | grepl("^(gam::s\\.\\d\\()", x) | grepl("^(mgcv::s\\.\\d\\()", x)
 }
-
 
 
 .grep_non_smoothers <- function(x) {
-  grepl("^(?!(s\\())", x, perl = TRUE) &
-    # this one captures smoothers in zi- or mv-models from gam
-    grepl("^(?!(s\\.\\d\\())", x, perl = TRUE) &
-    grepl("^(?!(ti\\())", x, perl = TRUE) &
-    grepl("^(?!(te\\())", x, perl = TRUE) &
-    grepl("^(?!(t2\\())", x, perl = TRUE) &
-    grepl("^(?!(gam::s\\())", x, perl = TRUE) &
-    grepl("^(?!(gam::s\\.\\d\\())", x, perl = TRUE) &
-    grepl("^(?!(VGAM::s\\())", x, perl = TRUE) &
-    grepl("^(?!(mgcv::s\\())", x, perl = TRUE) &
-    grepl("^(?!(mgcv::s\\.\\d\\())", x, perl = TRUE) &
-    grepl("^(?!(mgcv::ti\\())", x, perl = TRUE) &
-    grepl("^(?!(mgcv::te\\())", x, perl = TRUE) &
-    grepl("^(?!(brms::s\\())", x, perl = TRUE) &
-    grepl("^(?!(brms::t2\\())", x, perl = TRUE) &
-    grepl("^(?!(smooth_sd\\[))", x, perl = TRUE)
+  !.grep_smoothers(x) & !.grep_zi_smoothers(x)
 }
-
 
 
 # .split_formula <- function(f) {
@@ -413,7 +404,6 @@
 # }
 
 
-
 .gam_family <- function(x) {
   faminfo <- .safe(stats::family(x))
 
@@ -424,7 +414,6 @@
 
   faminfo
 }
-
 
 
 # for models with zero-inflation component, return
@@ -445,8 +434,6 @@
     dat
   )
 }
-
-
 
 
 #' @keywords internal
@@ -475,7 +462,6 @@
 }
 
 
-
 .is_baysian_emmeans <- function(x) {
   if (inherits(x, "emm_list")) {
     x <- x[[1]]
@@ -485,17 +471,19 @@
 }
 
 
-
-.is_bayesian_model <- function(x) {
-  inherits(x, c(
-    "brmsfit", "stanfit", "MCMCglmm", "stanreg",
-    "stanmvreg", "bmerMod", "BFBayesFactor", "bamlss",
-    "bayesx", "mcmc", "bcplm", "bayesQR", "BGGM",
-    "meta_random", "meta_fixed", "meta_bma", "blavaan",
-    "blrm"
-  ))
+.is_bayesian_model <- function(x, exclude = NULL) {
+  bayes_classes <- c(
+    "brmsfit", "stanfit", "MCMCglmm", "stanreg", "stanmvreg", "bmerMod",
+    "BFBayesFactor", "bamlss", "bayesx", "mcmc", "bcplm", "bayesQR", "BGGM",
+    "meta_random", "meta_fixed", "meta_bma", "blavaan", "blrm", "blmerMod",
+    "bglmerMod"
+  )
+  # if exclude is not NULL, remove elements in exclude from bayes_class
+  if (!is.null(exclude)) {
+    bayes_classes <- bayes_classes[!bayes_classes %in% exclude]
+  }
+  inherits(x, bayes_classes)
 }
-
 
 
 # safe conversion from factor to numeric
@@ -544,9 +532,6 @@
 }
 
 
-
-
-
 ## copied from lme4::findbars() -----------------------
 
 
@@ -560,7 +545,6 @@
     paste0(trm, "|", deparse(term[[3]]))
   }, ""), collapse = ")+("), ")"))[[2]]
 }
-
 
 
 .expandDoubleVerts <- function(term) {
@@ -579,7 +563,6 @@
   }
   term
 }
-
 
 
 .findbars <- function(term) {
@@ -646,8 +629,6 @@
 }
 
 
-
-
 ## copied from lme4::nobars() -----------------------
 
 
@@ -665,7 +646,6 @@
   }
   nb
 }
-
 
 
 .nobars_ <- function(term) {
@@ -707,7 +687,6 @@
 }
 
 
-
 .isBar <- function(term) {
   if (is.call(term) && ((term[[1]] == as.name("|") || term[[1]] == as.name("||")))) {
     return(TRUE)
@@ -726,7 +705,6 @@
   }
   FALSE
 }
-
 
 
 # classify emmeans objects -------------

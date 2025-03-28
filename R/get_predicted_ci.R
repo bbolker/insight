@@ -83,8 +83,6 @@ get_predicted_ci <- function(x, ...) {
 }
 
 
-
-
 # General method ----------------------------------------------------------
 
 #' @rdname get_predicted_ci
@@ -199,7 +197,6 @@ get_predicted_ci.mlm <- function(x, verbose = TRUE, ...) {
 }
 
 
-
 #' @export
 get_predicted_ci.polr <- function(x,
                                   predictions = NULL,
@@ -237,12 +234,6 @@ get_predicted_ci.multinom <- get_predicted_ci.mlm
 
 #' @export
 get_predicted_ci.bracl <- get_predicted_ci.mlm
-
-
-
-
-
-
 
 
 ## Convert to CI -----------
@@ -380,8 +371,6 @@ get_predicted_ci.bracl <- get_predicted_ci.mlm
 }
 
 
-
-
 # Get PI ------------------------------------------------------------------
 
 .get_predicted_pi_glm <- function(x, predictions, ci = 0.95, ...) {
@@ -408,8 +397,6 @@ get_predicted_ci.bracl <- get_predicted_ci.mlm
 }
 
 
-
-
 # Interval helpers --------------------------------------------------------
 
 .get_predicted_se_from_iter <- function(iter, dispersion_method = "SD") {
@@ -432,8 +419,6 @@ get_predicted_ci.bracl <- get_predicted_ci.mlm
 }
 
 
-
-
 .get_predicted_ci_from_iter <- function(iter, ci = 0.95, ci_method = "quantile") {
   # Interval
   ci_method <- match.arg(
@@ -453,7 +438,6 @@ get_predicted_ci.bracl <- get_predicted_ci.mlm
     }
     if (length(ci) == 1) names(out) <- c("Parameter", "CI_low", "CI_high")
   } else {
-    # installed?
     check_if_installed(c("bayestestR", "datawizard"))
     out <- as.data.frame(bayestestR::ci(as.data.frame(t(iter)), ci = ci, method = ci_method))
     if (length(ci) > 1L) out <- datawizard::reshape_ci(out)

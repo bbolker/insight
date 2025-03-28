@@ -621,12 +621,15 @@ n_obs.wbgee <- function(x, ...) {
 
 
 #' @export
-n_obs.Rchoice <- function(x, ...) {
-  nrow(x$mf)
+n_obs.glmgee <- function(x, ...) {
+  length(x$fitted.values)
 }
 
 
-
+#' @export
+n_obs.Rchoice <- function(x, ...) {
+  nrow(x$mf)
+}
 
 
 # mfx models --------------------------------------
@@ -659,9 +662,6 @@ n_obs.poissonirr <- n_obs.betamfx
 
 #' @export
 n_obs.logitor <- n_obs.betamfx
-
-
-
 
 
 # special models -----------

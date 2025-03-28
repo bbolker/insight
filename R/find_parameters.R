@@ -20,6 +20,8 @@
 #'
 #' @inheritSection find_predictors Model components
 #'
+#' @inheritSection find_predictors Parameters, Variables, Predictors and Terms
+#'
 #' @return A list of parameter names. For simple models, only one list-element,
 #'    `conditional`, is returned.
 #'
@@ -31,7 +33,6 @@
 find_parameters <- function(x, ...) {
   UseMethod("find_parameters")
 }
-
 
 
 # Default methods -------------------------------------------
@@ -89,8 +90,6 @@ find_parameters.summary.lm <- function(x, flatten = FALSE, ...) {
     l
   }
 }
-
-
 
 
 # Ordinal -----------------------------------------------
@@ -173,12 +172,24 @@ find_parameters.multinom <- function(x, flatten = FALSE, ...) {
 #' @export
 find_parameters.brmultinom <- find_parameters.multinom
 
+#' @export
+find_parameters.multinom_weightit <- function(x, flatten = FALSE, ...) {
+  params <- stats::coef(x)
+  resp <- gsub("(.*)~(.*)", "\\1", names(params))
+  pars <- list(conditional = gsub("(.*)~(.*)", "\\2", names(params))[resp == resp[1]])
+
+  if (flatten) {
+    unique(unlist(pars, use.names = FALSE))
+  } else {
+    pars
+  }
+}
+
 
 # SEM models ------------------------------------------------------
 
 #' @export
 find_parameters.blavaan <- function(x, flatten = FALSE, ...) {
-  # installed?
   check_if_installed("lavaan")
 
   param_tab <- lavaan::parameterEstimates(x)
@@ -227,7 +238,6 @@ find_parameters.blavaan <- function(x, flatten = FALSE, ...) {
 
 #' @export
 find_parameters.lavaan <- function(x, flatten = FALSE, ...) {
-  # installed?
   check_if_installed("lavaan")
 
   pars <- get_parameters(x)
@@ -242,17 +252,11 @@ find_parameters.lavaan <- function(x, flatten = FALSE, ...) {
 }
 
 
-
-
 # Panel models ----------------------------------------
 
-#' @rdname find_parameters
 #' @export
-find_parameters.pgmm <- function(x,
-                                 component = c("conditional", "all"),
-                                 flatten = FALSE,
-                                 ...) {
-  component <- match.arg(component)
+find_parameters.pgmm <- function(x, component = "conditional", flatten = FALSE, ...) {
+  component <- validate_argument(component, c("conditional", "all"))
   s <- summary(x, robust = FALSE)
 
   l <- list(
@@ -470,7 +474,6 @@ find_parameters.survreg <- function(x, flatten = FALSE, ...) {
 
 #' @export
 find_parameters.mle2 <- function(x, flatten = FALSE, ...) {
-  # installed?
   check_if_installed("bbmle")
 
   s <- bbmle::summary(x)
@@ -521,7 +524,6 @@ find_parameters.manova <- function(x, flatten = FALSE, ...) {
 find_parameters.maov <- find_parameters.manova
 
 
-
 #' @export
 find_parameters.afex_aov <- function(x, flatten = FALSE, ...) {
   if (is.null(x$aov)) {
@@ -561,7 +563,6 @@ find_parameters.mlm <- function(x, flatten = FALSE, ...) {
     out
   }
 }
-
 
 
 #' @export
@@ -642,11 +643,11 @@ find_parameters.aovlist <- function(x, flatten = FALSE, ...) {
 find_parameters.rqs <- function(x, flatten = FALSE, ...) {
   sc <- suppressWarnings(summary(x))
 
-  if (all(unlist(lapply(sc, is.list), use.names = FALSE))) {
-    pars <- list(conditional = rownames(stats::coef(sc[[1]])))
-  } else {
+  if (!all(unlist(lapply(sc, is.list), use.names = FALSE))) {
     return(find_parameters.default(x, flatten = flatten, ...))
   }
+
+  pars <- list(conditional = rownames(stats::coef(sc[[1]])))
   pars$conditional <- text_remove_backticks(pars$conditional)
 
   if (flatten) {
@@ -795,14 +796,10 @@ find_parameters.mira <- function(x, flatten = FALSE, ...) {
 
 
 ## For questions or problems with this ask Fernando Miguez (femiguez@iastate.edu)
-#' @rdname find_parameters
 #' @export
-find_parameters.nls <- function(x,
-                                component = c("all", "conditional", "nonlinear"),
-                                flatten = FALSE,
-                                ...) {
-  component <- match.arg(component)
-  f <- find_formula(x)
+find_parameters.nls <- function(x, component = "all", flatten = FALSE, ...) {
+  component <- validate_argument(component, c("all", "conditional", "nonlinear"))
+  f <- find_formula(x, verbose = FALSE)
   elements <- .get_elements(effects = "fixed", component = component)
   f <- .prepare_predictors(x, f, elements)
   pars <- .return_vars(f, x)
@@ -813,7 +810,6 @@ find_parameters.nls <- function(x,
     pars
   }
 }
-
 
 
 # helper ----------------------------

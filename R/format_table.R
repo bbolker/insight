@@ -1,11 +1,11 @@
 #' @title Parameter table formatting
 #' @name format_table
 #'
-#' @description This functions takes a data frame with model parameters as input
-#'   and formats certain columns into a more readable layout (like collapsing
-#'   separate columns for lower and upper confidence interval values). Furthermore,
-#'   column names are formatted as well. Note that `format_table()`
-#'   converts all columns into character vectors!
+#' @description This functions takes a data frame (usually with model
+#'   parameters) as input and formats certain columns into a more readable
+#'   layout (like collapsing separate columns for lower and upper confidence
+#'   interval values). Furthermore, column names are formatted as well. Note
+#'   that `format_table()` converts all columns into character vectors!
 #'
 #' @param x A data frame of model's parameters, as returned by various functions
 #'   of the **easystats**-packages. May also be a result from
@@ -44,6 +44,52 @@
 #'   cases, use `stars = c("pd", "BF")` to add stars to both columns, or
 #'   `stars = "BF"` to only add stars to the Bayes factor and exclude the `pd`
 #'   column. Currently, following columns are recognized: `"BF"`, `"pd"` and `"p"`.
+#' @param stars_only If `TRUE`, return significant stars only (and no p-values).
+#' @param select Determines which columns are printed and the table layout.
+#' There are two options for this argument:
+#'
+#' * **A string expression with layout pattern**
+#'
+#'   `select` is a string with "tokens" enclosed in braces. These tokens will be
+#'   replaced by their associated columns, where the selected columns will be
+#'   collapsed into one column. Following tokens are replaced by the related
+#'   coefficients or statistics: `{estimate}`, `{se}`, `{ci}` (or `{ci_low}` and
+#'   `{ci_high}`), `{p}`, `{pd}` and `{stars}`. The token `{ci}` will be replaced
+#'   by `{ci_low}, {ci_high}`. Example: `select = "{estimate}{stars} ({ci})"`
+#'
+#'   It is possible to create multiple columns as well. A `|` separates values
+#'   into new cells/columns. Example: `select = "{estimate} ({ci})|{p}"`.
+#'
+#' * **A string indicating a pre-defined layout**
+#'
+#'   `select` can be one of the following string values, to create one of the
+#'   following pre-defined column layouts:
+#'
+#'   - `"minimal"`: Estimates, confidence intervals and numeric p-values, in two
+#'     columns. This is equivalent to `select = "{estimate} ({ci})|{p}"`.
+#'   - `"short"`: Estimate, standard errors and numeric p-values, in two columns.
+#'     This is equivalent to `select = "{estimate} ({se})|{p}"`.
+#'   - `"ci"`: Estimates and confidence intervals, no asterisks for p-values.
+#'     This is equivalent to `select = "{estimate} ({ci})"`.
+#'   - `"se"`: Estimates and standard errors, no asterisks for p-values. This is
+#'     equivalent to `select = "{estimate} ({se})"`.
+#'   - `"ci_p"`: Estimates, confidence intervals and asterisks for p-values. This
+#'     is equivalent to `select = "{estimate}{stars} ({ci})"`.
+#'   - `"se_p"`: Estimates, standard errors and asterisks for p-values. This is
+#'     equivalent to `select = "{estimate}{stars} ({se})"`..
+#'
+#' Using `select` to define columns will re-order columns and remove all columns
+#' related to uncertainty (standard errors, confidence intervals), test statistics,
+#' and p-values (and similar, like `pd` or `BF` for Bayesian models), because
+#' these are assumed to be included or intentionally excluded when using `select`.
+#' The new column order will be: Parameter columns first, followed by the "glue"
+#' columns, followed by all remaining columns. If further columns should also be
+#' placed first, add those as `focal_terms` attributes to `x`. I.e., following
+#' columns are considers as "parameter columns" and placed first:
+#' `c(easystats_columns("parameter"), attributes(x)$focal_terms)`.
+#'
+#' **Note:** glue-like syntax is still experimental in the case of more complex models
+#' (like mixed models) and may not return expected results.
 #' @param ... Arguments passed to or from other methods.
 #' @inheritParams format_p
 #' @inheritParams format_value
@@ -53,15 +99,18 @@
 #' [Formatting, printing and exporting tables](https://easystats.github.io/insight/articles/display.html)
 #' and [Formatting model parameters](https://easystats.github.io/parameters/articles/model_parameters_formatting.html).
 #'
-#' @note `options(insight_use_symbols = TRUE)` override the `use_symbols` argument
+#' @note `options(insight_use_symbols = TRUE)` overrides the `use_symbols` argument
 #'   and always displays symbols, if possible.
-#' @examplesIf require("rstanarm", warn.conflicts = FALSE) && require("parameters", , warn.conflicts = FALSE)
+#' @examplesIf require("rstanarm", warn.conflicts = FALSE) && require("parameters", warn.conflicts = FALSE) && packageVersion("parameters") > "0.22.2"
 #' format_table(head(iris), digits = 1)
 #'
 #' m <- lm(Sepal.Length ~ Species * Sepal.Width, data = iris)
 #' x <- parameters::model_parameters(m)
 #' as.data.frame(format_table(x))
 #' as.data.frame(format_table(x, p_digits = "scientific"))
+#' # "glue" columns
+#' as.data.frame(format_table(x, select = "minimal"))
+#' as.data.frame(format_table(x, select = "{estimate}{stars}|{p}"))
 #'
 #' \donttest{
 #' model <- rstanarm::stan_glm(
@@ -79,17 +128,19 @@
 format_table <- function(x,
                          pretty_names = TRUE,
                          stars = FALSE,
+                         stars_only = FALSE,
                          digits = 2,
                          ci_width = "auto",
                          ci_brackets = TRUE,
-                         ci_digits = 2,
+                         ci_digits = digits,
                          p_digits = 3,
-                         rope_digits = 2,
+                         rope_digits = digits,
                          ic_digits = 1,
                          zap_small = FALSE,
                          preserve_attributes = FALSE,
                          exact = TRUE,
                          use_symbols = getOption("insight_use_symbols", FALSE),
+                         select = NULL,
                          verbose = TRUE,
                          ...) {
   # validation check
@@ -102,10 +153,20 @@ format_table <- function(x,
 
   # check if user supplied digits attributes
   if (missing(digits)) digits <- .additional_arguments(x, "digits", 2)
-  if (missing(ci_digits)) ci_digits <- .additional_arguments(x, "ci_digits", 2)
+  if (missing(ci_digits)) ci_digits <- .additional_arguments(x, "ci_digits", digits)
   if (missing(p_digits)) p_digits <- .additional_arguments(x, "p_digits", 3)
-  if (missing(rope_digits)) rope_digits <- .additional_arguments(x, "rope_digits", 2)
+  if (missing(rope_digits)) rope_digits <- .additional_arguments(x, "rope_digits", digits)
   if (missing(ic_digits)) ic_digits <- .additional_arguments(x, "ic_digits", 1)
+
+  # find name of coefficient, if present
+  coef_column_name <- attributes(x)$coef_name
+  # create p_stars, needed for glue
+  if (any(c("p", "p.value") %in% colnames(x))) {
+    p_col <- ifelse("p" %in% colnames(x), "p", "p.value")
+    p_stars <- format_p(x[[p_col]], stars = TRUE, stars_only = TRUE)
+  } else {
+    p_stars <- NULL
+  }
 
   att <- attributes(x)
   x <- as.data.frame(x, stringsAsFactors = FALSE)
@@ -136,7 +197,7 @@ format_table <- function(x,
 
 
   # P values ----
-  x <- .format_p_values(x, stars = stars, p_digits = p_digits)
+  x <- .format_p_values(x, stars = stars, p_digits = p_digits, stars_only = stars_only)
 
 
   # Main CI and Prediction Intervals ----
@@ -167,8 +228,6 @@ format_table <- function(x,
     gsub("_partial$", "", names(x)[endsWith(names(x), "_partial")]),
     " (partial)"
   )
-
-
 
 
   # metafor ----
@@ -215,6 +274,17 @@ format_table <- function(x,
 
   x[] <- lapply(x, as.character)
 
+  # apply glue-styled formatting
+  if (!is.null(select)) {
+    x <- .format_glue_table(
+      x,
+      style = select,
+      coef_column = coef_column_name,
+      p_stars = p_stars,
+      ...
+    )
+  }
+
   # restore attributes
   if (isTRUE(preserve_attributes)) {
     attributes(x) <- utils::modifyList(att, attributes(x))
@@ -223,16 +293,13 @@ format_table <- function(x,
 }
 
 
-
-
-
 # sub-routines ---------------
 
 
 # Format various p-values, coming from different easystats-packages
 # like bayestestR (p_ROPE, p_MAP) or performance (p_Chi2)
 
-.format_p_values <- function(x, p_digits, stars = FALSE) {
+.format_p_values <- function(x, p_digits, stars = FALSE, stars_only = FALSE) {
   # Specify stars for which column (#656)
   if (is.character(stars)) {
     starlist <- list(p = FALSE)
@@ -246,6 +313,7 @@ format_table <- function(x,
       x[[pv]] <- format_p(
         x[[pv]],
         stars = starlist[["p"]],
+        stars_only = stars_only,
         name = NULL,
         missing = "",
         digits = p_digits
@@ -263,6 +331,7 @@ format_table <- function(x,
       x[[stats]] <- format_p(
         x[[stats]],
         stars = starlist[["p"]],
+        stars_only = stars_only,
         name = NULL,
         missing = "",
         digits = p_digits
@@ -322,10 +391,17 @@ format_table <- function(x,
   names(x)[names(x) == "Cohens_g"] <- "Cohen's g"
   names(x)[names(x) == "Cohens_f"] <- "Cohen's f"
   names(x)[names(x) == "Cohens_f_partial"] <- "Cohen's f (partial)"
+  names(x)[names(x) == "Cohens_d_robust"] <- "Robust Cohen's d"
+  names(x)[names(x) == "Cohens_d_robust_CI_low"] <- "Robust Cohen's d_CI_low"
+  names(x)[names(x) == "Cohens_d__robust_CI_high"] <- "Robust Cohen's d_CI_high"
+  names(x)[names(x) == "d_partial"] <- "d (partial)"
+  names(x)[names(x) == "d_marginal"] <- "d (marginal)"
   names(x)[names(x) == "Cramers_v"] <- "Cramer's V"
   names(x)[names(x) == "Cramers_v_adjusted"] <- "Cramer's V (adj.)"
   names(x)[names(x) == "r_rank_biserial"] <- "r (rank biserial)"
   names(x)[names(x) == "Hedges_g"] <- "Hedges' g"
+  names(x)[names(x) == "Hedges_g_CI_low"] <- "Hedges' g_CI_low"
+  names(x)[names(x) == "Hedges_g_CI_high"] <- "Hedges' g_CI_high"
   names(x)[names(x) == "Mahalanobis_D"] <- "Mahalanobis' D"
   names(x)[names(x) == "Pearsons_c"] <- "Pearson's C"
   names(x)[names(x) == "Kendalls_W"] <- "Kendall's W"
@@ -372,7 +448,6 @@ format_table <- function(x,
 }
 
 
-
 .format_aov_columns <- function(x) {
   if ("Deviance_error" %in% names(x)) {
     x$Deviance_error <- format_value(x$Deviance_error, protect_integers = TRUE)
@@ -383,7 +458,6 @@ format_table <- function(x,
   }
   x
 }
-
 
 
 .format_freq_stats <- function(x) {
@@ -428,7 +502,6 @@ format_table <- function(x,
 
   x
 }
-
 
 
 .format_main_ci_columns <- function(x,
@@ -504,7 +577,6 @@ format_table <- function(x,
 }
 
 
-
 .format_other_ci_columns <- function(x, att, ci_digits, zap_small, ci_width = "auto", ci_brackets = TRUE) {
   other_ci_low <- names(x)[endsWith(names(x), "_CI_low")]
   other_ci_high <- names(x)[endsWith(names(x), "_CI_high")]
@@ -552,7 +624,6 @@ format_table <- function(x,
 }
 
 
-
 .format_broom_ci_columns <- function(x,
                                      ci_digits,
                                      zap_small,
@@ -588,7 +659,6 @@ format_table <- function(x,
 }
 
 
-
 .format_rope_columns <- function(x, zap_small, ci_width = "auto", ci_brackets = TRUE) {
   if (all(c("ROPE_low", "ROPE_high") %in% names(x))) {
     x$ROPE_low <- format_ci(
@@ -605,7 +675,6 @@ format_table <- function(x,
   }
   x
 }
-
 
 
 .format_std_columns <- function(x, other_ci_colname, digits, zap_small) {
@@ -635,7 +704,6 @@ format_table <- function(x,
 
   x
 }
-
 
 
 .format_bayes_columns <- function(x,
@@ -716,7 +784,6 @@ format_table <- function(x,
 }
 
 
-
 .format_performance_columns <- function(x, digits, ic_digits, zap_small, use_symbols) {
   if (isTRUE(use_symbols) && .unicode_symbols()) {
     if ("R2" %in% names(x)) names(x)[names(x) == "R2"] <- "R\u00b2"
@@ -795,14 +862,15 @@ format_table <- function(x,
 }
 
 
-
 .format_symbols <- function(x, use_symbols) {
   if (isTRUE(use_symbols) && .unicode_symbols()) {
     colnames(x) <- gsub("Delta", "\u0394", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("Phi", "\u03D5", colnames(x), ignore.case = TRUE)
+    colnames(x) <- gsub("Eta2", "\u03B7\u00b2", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("Eta", "\u03B7", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("Epsilon", "\u03b5", colnames(x), ignore.case = TRUE)
-    colnames(x) <- gsub("Omega", "\u03b5", colnames(x), ignore.case = TRUE)
+    colnames(x) <- gsub("Omega2", "\u03C9\u00b2", colnames(x), ignore.case = TRUE)
+    colnames(x) <- gsub("Omega", "\u03C9", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("R2", "R\u00b2", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("Chi2", "\u03C7\u00b2", colnames(x), ignore.case = TRUE)
     colnames(x) <- gsub("Chi", "\u03C7", colnames(x), ignore.case = TRUE)
@@ -813,7 +881,6 @@ format_table <- function(x,
   }
   x
 }
-
 
 
 # helper ---------------------
@@ -827,7 +894,6 @@ format_table <- function(x,
   }
   x
 }
-
 
 
 .additional_arguments <- function(x, value, default) {
@@ -845,7 +911,6 @@ format_table <- function(x,
 
   out
 }
-
 
 
 .unicode_symbols <- function() {

@@ -1,5 +1,5 @@
 #' @title Get model parameters from mixed models
-#' @name get_parameters.glmm
+#' @name get_parameters.glmmTMB
 #'
 #' @description Returns the coefficients from a model.
 #'
@@ -9,6 +9,8 @@
 #' @inheritParams find_parameters
 #' @inheritParams find_predictors
 #'
+#' @inheritSection find_predictors Model components
+#'
 #' @return If `effects = "fixed"`, a data frame with two columns: the
 #'   parameter names and the related point estimates. If `effects =
 #'   "random"`, a list of data frames with the random effects (as returned by
@@ -17,15 +19,110 @@
 #'
 #' @details In most cases when models either return different "effects" (fixed,
 #' random) or "components" (conditional, zero-inflated, ...), the arguments
-#' `effects` and `component` can be used.
+#' `effects` and `component` can be used. See details in the section
+#' _Model Components_.
 #'
-#' @examples
-#' data(mtcars)
-#' m <- lm(mpg ~ wt + cyl + vs, data = mtcars)
+#' @examplesIf requireNamespace("glmmTMB", quietly = TRUE)
+#' data(Salamanders, package = "glmmTMB")
+#' m <- glmmTMB::glmmTMB(
+#'   count ~ mined + (1 | site),
+#'   ziformula = ~mined,
+#'   family = poisson(),
+#'   data = Salamanders
+#' )
 #' get_parameters(m)
 #' @export
-get_parameters.glmm <- function(x, effects = c("all", "fixed", "random"), ...) {
-  effects <- match.arg(effects)
+get_parameters.glmmTMB <- function(x, effects = "fixed", component = "all", ...) {
+  check_if_installed("lme4")
+
+  effects <- validate_argument(effects, c("fixed", "random"))
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "zi", "zero_inflated", "dispersion", "location", "distributional", "auxiliary") # nolint
+  )
+
+  if (effects == "fixed") {
+    l <- compact_list(list(
+      conditional = lme4::fixef(x)$cond,
+      zero_inflated = lme4::fixef(x)$zi,
+      dispersion = lme4::fixef(x)$disp
+    ))
+  } else {
+    l <- compact_list(list(
+      conditional = lme4::fixef(x)$cond,
+      random = lme4::ranef(x)$cond,
+      zero_inflated = lme4::fixef(x)$zi,
+      zero_inflated_random = lme4::ranef(x)$zi,
+      dispersion = lme4::fixef(x)$disp,
+      dispersion_random = lme4::ranef(x)$disp
+    ))
+  }
+
+  # ---- fixed effects (conditional model)
+
+  fixed <- data.frame(
+    Parameter = names(l$conditional),
+    Estimate = unname(l$conditional),
+    Component = "conditional",
+    stringsAsFactors = FALSE
+  )
+
+  # ---- fixed effects (zero_inflated model)
+
+  if (object_has_names(l, "zero_inflated")) {
+    fixedzi <- data.frame(
+      Parameter = names(l$zero_inflated),
+      Estimate = unname(l$zero_inflated),
+      Component = "zero_inflated",
+      stringsAsFactors = FALSE
+    )
+  } else {
+    fixedzi <- NULL
+  }
+
+  # ---- fixed effects (dispersion model)
+
+  if (object_has_names(l, "dispersion")) {
+    fixeddisp <- data.frame(
+      Parameter = names(l$dispersion),
+      Estimate = unname(l$dispersion),
+      Component = "dispersion",
+      stringsAsFactors = FALSE
+    )
+  } else {
+    fixeddisp <- NULL
+  }
+
+  # ---- build result
+
+  if (effects == "fixed") {
+    out <- switch(component,
+      all = rbind(fixed, fixedzi, fixeddisp),
+      conditional = fixed,
+      zi = ,
+      zero_inflated = fixedzi,
+      dispersion = fixeddisp
+    )
+    text_remove_backticks(out)
+  } else if (effects == "random") {
+    switch(component,
+      all = compact_list(list(
+        random = l$random,
+        zero_inflated_random = l$zero_inflated_random,
+        dispersion_random = l$dispersion_random
+      )),
+      conditional = l$random,
+      zi = ,
+      zero_inflated = l$zero_inflated_random,
+      dispersion_random = l$dispersion_random
+    )
+  }
+}
+
+
+#' @export
+get_parameters.glmm <- function(x, effects = "all", ...) {
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
 
   params <- data.frame(
     Parameter = names(c(x$beta, x$nu)),
@@ -44,14 +141,10 @@ get_parameters.glmm <- function(x, effects = c("all", "fixed", "random"), ...) {
 }
 
 
-
-#' @rdname get_parameters.glmm
 #' @export
-get_parameters.coxme <- function(x, effects = c("fixed", "random"), ...) {
-  # installed?
+get_parameters.coxme <- function(x, effects = "fixed", ...) {
   check_if_installed("lme4")
-
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = lme4::fixef(x))
@@ -76,10 +169,9 @@ get_parameters.coxme <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
 #' @export
-get_parameters.wbm <- function(x, effects = c("fixed", "random"), ...) {
-  effects <- match.arg(effects)
+get_parameters.wbm <- function(x, effects = "fixed", ...) {
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     s <- summary(x)
@@ -115,7 +207,6 @@ get_parameters.wbm <- function(x, effects = c("fixed", "random"), ...) {
 
     text_remove_backticks(out)
   } else {
-    # installed?
     check_if_installed("lme4")
     lme4::ranef(x)
   }
@@ -128,18 +219,12 @@ get_parameters.wbgee <- function(x, ...) {
 }
 
 
-
-#' @rdname get_parameters.glmm
 #' @export
-get_parameters.nlmerMod <- function(x,
-                                    effects = c("fixed", "random"),
-                                    component = c("all", "conditional", "nonlinear"),
-                                    ...) {
-  # installed?
+get_parameters.nlmerMod <- function(x, effects = "fixed", component = "all", ...) {
   check_if_installed("lme4")
 
-  effects <- match.arg(effects)
-  component <- match.arg(component)
+  effects <- validate_argument(effects, c("fixed", "random"))
+  component <- validate_argument(component, c("all", "conditional", "nonlinear"))
 
   startvectors <- .get_startvector_from_env(x)
   fx <- lme4::fixef(x)
@@ -184,14 +269,11 @@ get_parameters.nlmerMod <- function(x,
 }
 
 
-
-#' @rdname get_parameters.glmm
 #' @export
-get_parameters.merMod <- function(x, effects = c("fixed", "random"), ...) {
-  # installed?
+get_parameters.merMod <- function(x, effects = "fixed", ...) {
   check_if_installed("lme4")
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = lme4::fixef(x))
@@ -224,6 +306,19 @@ get_parameters.glmmadmb <- get_parameters.merMod
 #' @export
 get_parameters.lme <- get_parameters.merMod
 
+
+#' @export
+get_parameters.svy2lme <- function(x, ...) {
+  l <- list(conditional = stats::coef(x))
+  fixed <- data.frame(
+    Parameter = names(l$conditional),
+    Estimate = unname(l$conditional),
+    stringsAsFactors = FALSE
+  )
+  text_remove_backticks(fixed)
+}
+
+
 #' @export
 get_parameters.merModList <- function(x, ...) {
   s <- suppressWarnings(summary(x))
@@ -236,12 +331,12 @@ get_parameters.merModList <- function(x, ...) {
   text_remove_backticks(fixed)
 }
 
+
 #' @export
-get_parameters.HLfit <- function(x, effects = c("fixed", "random"), ...) {
-  # installed?
+get_parameters.HLfit <- function(x, effects = "fixed", ...) {
   check_if_installed("lme4")
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = lme4::fixef(x))
@@ -267,14 +362,13 @@ get_parameters.HLfit <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
 #' @export
-get_parameters.sem <- function(x, effects = c("fixed", "random"), ...) {
+get_parameters.sem <- function(x, effects = "fixed", ...) {
   if (!.is_semLme(x)) {
     return(NULL)
   }
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = x$coef)
@@ -299,13 +393,11 @@ get_parameters.sem <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
 #' @export
-get_parameters.cpglmm <- function(x, effects = c("fixed", "random"), ...) {
-  # installed?
+get_parameters.cpglmm <- function(x, effects = "fixed", ...) {
   check_if_installed("cplm")
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = cplm::fixef(x))
@@ -330,13 +422,11 @@ get_parameters.cpglmm <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
 #' @export
-get_parameters.mixed <- function(x, effects = c("fixed", "random"), ...) {
-  # installed?
+get_parameters.mixed <- function(x, effects = "fixed", ...) {
   check_if_installed("lme4")
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   if (effects == "fixed") {
     l <- list(conditional = lme4::fixef(x$full_model))
@@ -361,16 +451,15 @@ get_parameters.mixed <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
 #' @export
-get_parameters.MixMod <- function(x,
-                                  effects = c("fixed", "random"),
-                                  component = c("all", "conditional", "zi", "zero_inflated", "dispersion"), ...) {
-  # installed?
+get_parameters.MixMod <- function(x, effects = "fixed", component = "all", ...) {
   check_if_installed("lme4")
 
-  effects <- match.arg(effects)
-  component <- match.arg(component)
+  effects <- validate_argument(effects, c("fixed", "random"))
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "zi", "zero_inflated", "dispersion", "location", "distributional", "auxiliary") # nolint
+  )
 
   has_zeroinf <- !is.null(find_formula(x, verbose = FALSE)[["zero_inflated"]])
 
@@ -378,10 +467,8 @@ get_parameters.MixMod <- function(x,
     format_error("Model has no zero-inflation component.")
   }
 
-
   re.names <- dimnames(lme4::ranef(x))[[2]]
   re <- lme4::ranef(x)
-
 
   if (has_zeroinf) {
     z_inflated <- lme4::fixef(x, sub_model = "zero_part")
@@ -437,104 +524,18 @@ get_parameters.MixMod <- function(x,
 }
 
 
-
-#' @rdname get_parameters.glmm
 #' @export
-get_parameters.glmmTMB <- function(x,
-                                   effects = c("fixed", "random"),
-                                   component = c("all", "conditional", "zi", "zero_inflated", "dispersion"), ...) {
-  # installed?
-  check_if_installed("lme4")
-
-  effects <- match.arg(effects)
-  component <- match.arg(component)
-
-  if (effects == "fixed") {
-    l <- compact_list(list(
-      conditional = lme4::fixef(x)$cond,
-      zero_inflated = lme4::fixef(x)$zi,
-      dispersion = lme4::fixef(x)$disp
-    ))
-  } else {
-    l <- compact_list(list(
-      conditional = lme4::fixef(x)$cond,
-      random = lme4::ranef(x)$cond,
-      zero_inflated = lme4::fixef(x)$zi,
-      zero_inflated_random = lme4::ranef(x)$zi,
-      dispersion = lme4::fixef(x)$disp
-    ))
-  }
-
-  # ---- fixed effects (conditional model)
-
-  fixed <- data.frame(
-    Parameter = names(l$conditional),
-    Estimate = unname(l$conditional),
-    Component = "conditional",
-    stringsAsFactors = FALSE
+get_parameters.hglm <- function(x, effects = "fixed", component = "all", ...) {
+  effects <- validate_argument(effects, c("fixed", "random"))
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "dispersion", "location", "distributional", "auxiliary")
   )
-
-  # ---- fixed effects (zero_inflated model)
-
-  if (object_has_names(l, "zero_inflated")) {
-    fixedzi <- data.frame(
-      Parameter = names(l$zero_inflated),
-      Estimate = unname(l$zero_inflated),
-      Component = "zero_inflated",
-      stringsAsFactors = FALSE
-    )
-  } else {
-    fixedzi <- NULL
-  }
-
-  # ---- fixed effects (dispersion model)
-
-  if (object_has_names(l, "dispersion")) {
-    fixeddisp <- data.frame(
-      Parameter = names(l$dispersion),
-      Estimate = unname(l$dispersion),
-      Component = "dispersion",
-      stringsAsFactors = FALSE
-    )
-  } else {
-    fixeddisp <- NULL
-  }
-
-  # ---- build result
-
-  if (effects == "fixed") {
-    out <- switch(component,
-      all = rbind(fixed, fixedzi, fixeddisp),
-      conditional = fixed,
-      zi = ,
-      zero_inflated = fixedzi,
-      dispersion = fixeddisp
-    )
-    text_remove_backticks(out)
-  } else if (effects == "random") {
-    switch(component,
-      all = compact_list(list(random = l$random, zero_inflated_random = l$zero_inflated_random)),
-      conditional = l$random,
-      zi = ,
-      zero_inflated = l$zero_inflated_random
-    )
-  }
-}
-
-
-
-#' @export
-get_parameters.hglm <- function(x,
-                                effects = c("fixed", "random", "all"),
-                                component = c("all", "conditional", "dispersion"),
-                                ...) {
-  effects <- match.arg(effects)
-  component <- match.arg(component)
 
   fe <- x$fixef
   re <- x$ranef
 
-  f <- find_formula(x)
+  f <- find_formula(x, verbose = FALSE)
   if (is.null(f$dispersion)) {
     dispersion <- NULL
   } else {
@@ -578,11 +579,10 @@ get_parameters.hglm <- function(x,
 }
 
 
-
 #' @export
-get_parameters.mixor <- function(x, effects = c("all", "fixed", "random"), ...) {
+get_parameters.mixor <- function(x, effects = "all", ...) {
   coefs <- stats::coef(x)
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
 
   params <- find_parameters(x, effects = "fixed", flatten = TRUE)
   fixed <- data.frame(
@@ -612,10 +612,9 @@ get_parameters.mixor <- function(x, effects = c("all", "fixed", "random"), ...) 
 }
 
 
-
 #' @export
-get_parameters.BBmm <- function(x, effects = c("fixed", "random"), ...) {
-  effects <- match.arg(effects)
+get_parameters.BBmm <- function(x, effects = "fixed", ...) {
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   l <- compact_list(list(
     conditional = x$fixed.coef,
@@ -637,11 +636,9 @@ get_parameters.BBmm <- function(x, effects = c("fixed", "random"), ...) {
 }
 
 
-
-#' @rdname get_parameters.glmm
 #' @export
-get_parameters.glimML <- function(x, effects = c("fixed", "random", "all"), ...) {
-  effects <- match.arg(effects)
+get_parameters.glimML <- function(x, effects = "fixed", ...) {
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
 
   l <- compact_list(list(
     conditional = x@fixed.param,

@@ -123,9 +123,6 @@ get_predicted_se <- function(x,
 }
 
 
-
-
-
 # Get Model matrix ------------------------------------------------------------
 
 .get_predicted_ci_modelmatrix <- function(x, data = NULL, vcovmat = NULL, verbose = TRUE, ...) {
@@ -148,7 +145,7 @@ get_predicted_se <- function(x,
     if (inherits(x, c("zeroinfl", "hurdle", "zerotrunc", "MixMod"))) {
       # model terms, required for model matrix
       model_terms <- tryCatch(stats::terms(x),
-        error = function(e) find_formula(x)$conditional
+        error = function(e) find_formula(x, verbose = FALSE)$conditional
       )
 
       all_terms <- find_terms(x)$conditional

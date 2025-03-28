@@ -10,6 +10,7 @@
 ^appveyor\.yml$
 ^pkgdown$
 ^README.Rmd
+^air.toml
 ^paper$
 ^Meta$
 ^WIP$
@@ -20,3 +21,4 @@
 \.lintr$
 ^CRAN-SUBMISSION$
 ^Rplots.pdf$
+^tests/testthat/_snaps/.

@@ -3,7 +3,8 @@
     return(FALSE)
   }
 
-  if ((cols <- Sys.getenv("RSTUDIO_CONSOLE_COLOR", "")) != "" && !is.na(as.numeric(cols))) {
+  cols <- Sys.getenv("RSTUDIO_CONSOLE_COLOR", "")
+  if (cols != "" && !is.na(as.numeric(cols))) {
     return(TRUE)
   }
 
@@ -19,6 +20,9 @@
     return(isTRUE(enabled))
   }
   if (.rstudio_with_ansi_support() && sink.number() == 0) {
+    return(TRUE)
+  }
+  if (Sys.getenv("POSITRON", "") == "1" && sink.number() == 0) {
     return(TRUE)
   }
   if (!isatty(stdout())) {

@@ -64,7 +64,6 @@ get_parameters.emmGrid <- function(x, summary = FALSE, merge_parameters = FALSE,
 }
 
 
-#' @rdname get_parameters.emmGrid
 #' @export
 get_parameters.emm_list <- function(x, summary = FALSE, ...) {
   if (!.is_baysian_emmeans(x) || isTRUE(summary)) {
@@ -92,13 +91,10 @@ get_parameters.emm_list <- function(x, summary = FALSE, ...) {
 }
 
 
-
-
 # helper --------------------
 
 
 .clean_emmeans_draws <- function(x, ...) {
-  # installed?
   check_if_installed("emmeans")
 
   if (!is.null(attributes(x)$misc$predict.type) && attributes(x)$misc$predict.type != "none") {

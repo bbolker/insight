@@ -1,6 +1,4 @@
 skip_on_os("mac") # error: FreeADFunObject
-skip_if_not(getRversion() >= "4.0.0")
-skip_if(getRversion() > "4.3.3")
 skip_if_not_installed("TMB")
 skip_if_not_installed("glmmTMB")
 
@@ -975,7 +973,6 @@ test_that("model_info, ordered beta", {
 
 
 test_that("model_info, recognize ZI even without ziformula", {
-  skip_if_not_installed("glmmTMB")
   data("fish", package = "insight")
   fish$count <- fish$count + 1
   m1 <- glmmTMB::glmmTMB(
@@ -1010,3 +1007,101 @@ test_that("model_info, recognize ZI even without ziformula", {
 #     expect_equal(out$var.distribution, 1.44250604187634, tolerance = 1e-4)
 #   })
 # )
+
+test_that("get/find_parameters with dispersion-random", {
+  skip_if_not_installed("glmmTMB", minimum_version = "1.1.10")
+  data(Salamanders, package = "glmmTMB")
+  m <- glmmTMB::glmmTMB(
+    count ~ spp + cover + mined + (1 | site),
+    ziformula = ~ spp + mined,
+    dispformula = ~ DOY + (1 | site),
+    data = Salamanders,
+    family = glmmTMB::nbinom2
+  )
+  out <- get_parameters(m)
+  expect_identical(nrow(out), 19L)
+  out <- get_parameters(m, effects = "random")
+  expect_length(out, 2)
+  expect_named(out, c("random", "dispersion_random"))
+
+  expect_equal(
+    find_parameters(m),
+    list(
+      conditional = c(
+        "(Intercept)", "sppPR", "sppDM", "sppEC-A",
+        "sppEC-L", "sppDES-L", "sppDF", "cover", "minedno"
+      ),
+      random = list(site = "(Intercept)"),
+      zero_inflated = c(
+        "(Intercept)", "sppPR",
+        "sppDM", "sppEC-A", "sppEC-L", "sppDES-L", "sppDF", "minedno"
+      ),
+      dispersion = c("(Intercept)", "DOY"),
+      dispersion_random = "site"
+    ),
+    ignore_attr = TRUE
+  )
+  expect_equal(
+    find_parameters(m, effects = "fixed"),
+    list(
+      conditional = c(
+        "(Intercept)", "sppPR", "sppDM", "sppEC-A",
+        "sppEC-L", "sppDES-L", "sppDF", "cover", "minedno"
+      ),
+      zero_inflated = c(
+        "(Intercept)", "sppPR",
+        "sppDM", "sppEC-A", "sppEC-L", "sppDES-L", "sppDF", "minedno"
+      ),
+      dispersion = c("(Intercept)", "DOY")
+    ),
+    ignore_attr = TRUE
+  )
+  expect_equal(
+    find_parameters(m, effects = "random"),
+    list(
+      random = list(site = "(Intercept)"),
+      dispersion_random = "site"
+    ),
+    ignore_attr = TRUE
+  )
+  expect_equal(
+    find_parameters(m, component = "conditional"),
+    list(
+      conditional = c(
+        "(Intercept)", "sppPR", "sppDM", "sppEC-A",
+        "sppEC-L", "sppDES-L", "sppDF", "cover", "minedno"
+      ),
+      random = list(site = "(Intercept)")
+    ),
+    ignore_attr = TRUE
+  )
+
+  # formula and find random works
+  out <- find_formula(m)
+  expect_equal(
+    out,
+    list(
+      conditional = count ~ spp + cover + mined,
+      random = ~ 1 | site,
+      zero_inflated = ~ spp + mined,
+      dispersion = ~DOY,
+      dispersion_random = ~ 1 | site
+    ),
+    ignore_attr = TRUE
+  )
+  out <- find_random(m)
+  expect_identical(out, list(random = "site", dispersion_random = "site"))
+
+  skip_on_cran()
+
+  data(Salamanders, package = "glmmTMB")
+  m <- glmmTMB::glmmTMB(
+    count ~ spp + cover + mined + (1 | site),
+    ziformula = ~ spp + mined,
+    dispformula = ~ DOY + (1 + Wtemp | site),
+    data = Salamanders,
+    family = poisson()
+  )
+  out <- find_random_slopes(m)
+  expect_identical(out, list(dispersion_random = "Wtemp"))
+})

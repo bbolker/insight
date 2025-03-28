@@ -40,6 +40,10 @@
 #'   type (for instance, to a factor).
 #' * Other strings are passed directly to the `type` argument of the `predict()`
 #'   method supplied by the modelling package.
+#' * Specifically for models of class `brmsfit` (package *brms*), the `predict`
+#'   argument can be any valid option for the `dpar` argument, to predict
+#'   distributional parameters (such as `"sigma"`, `"beta"`, `"kappa"`, `"phi"`
+#'   and so on, see `?brms::brmsfamily`).
 #' * When `predict = NULL`, alternative arguments such as `type` will be captured
 #'   by the `...` ellipsis and passed directly to the `predict()` method supplied
 #'   by the modelling package. Note that this might result in conflicts with
@@ -270,7 +274,7 @@ get_predicted.default <- function(x,
   if (is.null(predictions)) {
     out <- NULL
   } else {
-    out <- .get_predicted_transform(x, predictions, my_args = my_args, ci_data, verbose = verbose)
+    out <- .get_predicted_transform(x, predictions, my_args = my_args, ci_data, verbose = verbose, ...)
   }
 
   # 4. step: final preparation
@@ -290,7 +294,6 @@ get_predicted.data.frame <- function(x, data = NULL, verbose = TRUE, ...) {
     get_predicted(data, x, verbose = verbose, ...)
   }
 }
-
 
 
 # LM and GLM --------------------------------------------------------------
@@ -357,7 +360,7 @@ get_predicted.lm <- function(x,
   )
 
   # 3. step: back-transform
-  out <- .get_predicted_transform(x, predictions, my_args, ci_data, verbose = verbose)
+  out <- .get_predicted_transform(x, predictions, my_args, ci_data, verbose = verbose, ...)
 
   # 4. step: final preparation
   .get_predicted_out(out$predictions, my_args = my_args, ci_data = out$ci_data)
@@ -365,8 +368,6 @@ get_predicted.lm <- function(x,
 
 #' @export
 get_predicted.glm <- get_predicted.lm
-
-
 
 
 # rms -------------------------------------------------------------------
@@ -378,7 +379,6 @@ get_predicted.glm <- get_predicted.lm
 
 #' @export
 get_predicted.lrm <- get_predicted.default
-
 
 
 # MASS: rlm -----------------------------------------------------
@@ -396,8 +396,6 @@ get_predicted.rlm <- get_predicted.default
 
 #' @export
 get_predicted.survreg <- get_predicted.lm
-
-
 
 
 # survival: coxph -------------------------------------------------------
@@ -453,8 +451,6 @@ get_predicted.coxph <- function(x,
   # 4. step: final preparation
   .get_predicted_out(out$predictions, my_args = my_args, ci_data = out$ci_data)
 }
-
-
 
 
 # bife ------------------------------------------------------------------
@@ -574,8 +570,6 @@ get_predicted.rma <- function(x,
 }
 
 
-
-
 # afex ------------------------------------------------------------------
 # =======================================================================
 
@@ -599,8 +593,6 @@ get_predicted.afex_aov <- function(x, data = NULL, ...) {
 
   out
 }
-
-
 
 
 # phylolm ---------------------------------------------------------------
@@ -652,7 +644,6 @@ get_predicted.phylolm <- function(x,
 }
 
 
-
 # ====================================================================
 # Utils --------------------------------------------------------------
 # ====================================================================
@@ -671,8 +662,6 @@ get_predicted.phylolm <- function(x,
   }
   re.form
 }
-
-
 
 
 # back-transformation ------------------------------------------------------
@@ -703,7 +692,7 @@ get_predicted.phylolm <- function(x,
   if (isTRUE(my_args$transform)) {
     # retrieve link-inverse, for back transformation...
     if (is.null(link_inv)) {
-      link_inv <- link_inverse(x)
+      link_inv <- .link_inverse(model = x, verbose = verbose, ...)
     }
 
     if (!is.null(ci_data)) {
@@ -761,6 +750,87 @@ get_predicted.phylolm <- function(x,
 }
 
 
+# internal to return possibly bias correct link-function
+.link_inverse <- function(model = NULL,
+                          bias_correction = FALSE,
+                          sigma = NULL,
+                          verbose = TRUE,
+                          ...) {
+  if (isTRUE(bias_correction)) {
+    dots <- list(...)
+    if (!is.null(sigma) && !is.na(sigma)) {
+      residual_variance <- sigma^2
+    } else {
+      residual_variance <- NULL
+    }
+    l <- .bias_correction(model, residual_variance, verbose)$linkinv
+    if (is.null(l)) {
+      l <- link_inverse(model)
+    }
+  } else {
+    l <- link_inverse(model)
+  }
+  l
+}
+
+
+# apply bias-correction for back-transformation of predictions on the link-scale
+# we want sigma^2 (residual_variance) here to calculate the correction
+.bias_correction <- function(model = NULL, residual_variance = NULL, verbose = TRUE) {
+  # we need a model object
+  if (is.null(model)) {
+    return(NULL)
+  }
+  # extract residual variance, if not provided
+  if (is.null(residual_variance)) {
+    residual_variance <- .get_residual_variance(model) # returns sigma^2
+  }
+  # we need residual variance
+  if (is.null(residual_variance)) {
+    if (verbose) {
+      format_alert("Could not extract residual variance to apply bias correction. No bias adjustment carried out.") # nolint
+    }
+    return(NULL)
+  }
+
+  # extract current link function
+  link <- .safe(get_family(model))
+  # we need a link function
+  if (is.null(link)) {
+    if (verbose) {
+      format_alert("Could not extract information about the model's link-function to apply bias correction. No bias adjustment carried out.") # nolint
+    }
+    return(NULL)
+  }
+
+  link$inv <- link$linkinv
+  link$der <- link$mu.eta
+  link$residual_variance <- residual_variance / 2
+
+  link$der2 <- function(eta) {
+    with(link, 1000 * (der(eta + 5e-4) - der(eta - 5e-4)))
+  }
+  link$linkinv <- function(eta) {
+    with(link, inv(eta) + residual_variance * der2(eta))
+  }
+  link$mu.eta <- function(eta) {
+    with(link, der(eta) + 1000 * residual_variance * (der2(eta + 5e-4) - der2(eta - 5e-4)))
+  }
+  link
+}
+
+
+.get_residual_variance <- function(x) {
+  if (is_mixed_model(x)) {
+    out <- .safe(get_variance_residual(x))
+  } else {
+    out <- .safe(.get_sigma(x, no_recursion = TRUE, verbose = FALSE)^2, 0)
+    if (!length(out)) {
+      out <- 0
+    }
+  }
+  out
+}
 
 
 # -------------------------------------------------------------------------
@@ -802,8 +872,6 @@ get_predicted.phylolm <- function(x,
   class(predictions) <- c("get_predicted", class(predictions))
   predictions
 }
-
-
 
 
 # Bootstrap ==============================================================
@@ -848,13 +916,12 @@ get_predicted.phylolm <- function(x,
 }
 
 
-
-
 # -------------------------------------------------------------------------
 
 .get_predicted_centrality_from_draws <- function(x,
                                                  iter,
                                                  centrality_function = base::mean,
+                                                 datagrid = NULL,
                                                  ...) {
   # outcome: ordinal/multinomial/multivariate produce a 3D array of predictions,
   # which we stack in "long" format
@@ -870,6 +937,16 @@ get_predicted.phylolm <- function(x,
       Predicted = apply(iter_stacked, 1, centrality_function),
       stringsAsFactors = FALSE
     )
+    # for ordinal etc. outcomes, we need to include the data from the grid, too
+    if (!is.null(datagrid)) {
+      # due to reshaping predictions into long format, we to repeat the
+      # datagrid multiple times, to have same number of rows
+      times <- nrow(predictions) / nrow(datagrid)
+      if (nrow(predictions) %% times == 0) {
+        datagrid <- do.call(rbind, replicate(times, datagrid, simplify = FALSE))
+        predictions <- cbind(predictions[1:2], datagrid, predictions[3])
+      }
+    }
     iter <- as.data.frame(iter_stacked)
     # outcome with a single level
   } else {
@@ -887,16 +964,11 @@ get_predicted.phylolm <- function(x,
 }
 
 
-
 # -------------------------------------------------------------------------
 
-.create_newmods_rma <- function(x, data, ...) {
+.create_newmods_rma <- function(x, data, ...) {}
 
-}
-
-.create_newscale_rma <- function(x, data, ...) {
-
-}
+.create_newscale_rma <- function(x, data, ...) {}
 
 .get_blup_rma <- function(x, data, ci = NULL, ...) {
   if (is.element(x$test, c("knha", "adhoc", "t"))) {

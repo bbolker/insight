@@ -39,13 +39,11 @@ supported_models <- function() {
 }
 
 
-
-
 .supported_models_list <- function() {
   c(
     # a ----------------------------
-    "aareg", "afex_aov", "aov", "aovlist", "AKP", "Anova.mlm", "anova.rms",
-    "Arima", "averaging",
+    "asym", "aareg", "afex_aov", "aov", "aovlist", "AKP", "Anova.mlm",
+    "anova.rms", "Arima", "averaging",
 
     # b ----------------------------
     "bamlss", "bamlss.frame", "bayesx", "bayesQR", "BBmm", "BBreg", "bcplm",
@@ -57,20 +55,23 @@ supported_models <- function() {
     "censReg", "cgam", "cgamm", "cglm", "clm", "clm2", "clmm", "clmm2",
     "clogit", "coeftest", "complmrob", "confusionMatrix", "coxme", "coxph",
     "coxph.penal", "coxr", "cpglm", "cpglmm", "crch", "crq", "crqs", "crr",
+    "coxph_weightit",
 
     # d ----------------------------
     "dep.effect", "DirichletRegModel", "draws", "drc",
 
     # e ----------------------------
-    "eglm", "elm", "epi.2by2", "ergm",
+    "eglm", "elm", "epi.2by2", "ergm", "emmGrid",
 
     # f ----------------------------
-    "feis", "felm", "feglm", "fitdistr", "fixest", "flexsurvreg", "flac", "flic",
+    "fdm", "feis", "felm", "feglm", "fitdistr", "fixest", "flexsurvreg",
+    "flac", "flic",
 
     # g ----------------------------
     "gam", "Gam", "gamlss", "gamm", "gamm4", "garch", "gbm", "gee", "geeglm",
     "glht", "glimML", "glmm", "glm", "Glm", "glmmadmb", "glmmPQL", "glmmTMB",
-    "glmrob", "glmRob", "glmx", "gls", "gmnl",
+    "glmrob", "glmRob", "glmx", "gls", "gmnl", "glmgee", "ggcomparisons",
+    "glmerMod", "glm_weightit",
 
     # h ----------------------------
     "HLfit", "htest", "hurdle", "hglm",
@@ -89,13 +90,13 @@ supported_models <- function() {
     "metaplus", "merMod", "merModList", "mipo", "mira", "mixed", "mixor", "MixMod",
     "mhurdle", "mjoint", "mle", "mle2", "mlm", "mblogit", "mclogit", "mcmc.list",
     "meta_bma", "meta_fixed", "meta_random", "mlogit", "mmlogit", "model_fit",
-    "multinom", "mvord", "mmclogit", "mmrm", "mmrm_fit", "mmrm_tmb",
+    "multinom", "mvord", "mmclogit", "mmrm", "mmrm_fit", "mmrm_tmb", "multinom_weightit",
 
     # n ----------------------------
     "negbinmfx", "negbinirr", "nestedLogit",
 
     # o ----------------------------
-    "ols", "onesampb", "orm",
+    "ols", "onesampb", "orm", "ordinal_weightit", "oohbchoice",
 
     # p ----------------------------
     "PMCMR", "poissonmfx", "poissonirr", "pgmm", "plm", "polr", "psm",
@@ -108,7 +109,8 @@ supported_models <- function() {
     # s ----------------------------
     "Sarlm", "scam", "selection", "sem", "semLm", "semLme", "SemiParBIV", "serp",
     "slm", "speedlm", "speedglm", "stanfit", "stanmvreg", "stanreg", "summary.lm",
-    "survfit", "survreg", "svy_vglm", "svychisq", "svyglm", "svyolr",
+    "survfit", "survreg", "svy_vglm", "svychisq", "svyglm", "svyolr", "svy2lme",
+    "seqanova.svyglm",
 
     # t ----------------------------
     "t1way", "tobit", "trimcibt", "truncreg",

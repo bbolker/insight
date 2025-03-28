@@ -2,14 +2,12 @@
 #' @name find_parameters.BGGM
 #'
 #' @description Returns the names of model parameters, like they typically
-#'     appear in the `summary()` output. For Bayesian models, the parameter
-#'     names equal the column names of the posterior samples after coercion
-#'     from `as.data.frame()`.
+#' appear in the `summary()` output. For Bayesian models, the parameter
+#' names equal the column names of the posterior samples after coercion
+#' from `as.data.frame()`.
 #'
 #' @param parameters Regular expression pattern that describes the parameters that
-#'   should be returned.
-#' @param effects Should parameters for fixed effects, random effects
-#'    or both be returned? Only applies to mixed models. May be abbreviated.
+#' should be returned.
 #' @param ... Currently not used.
 #' @inheritParams find_parameters
 #' @inheritParams find_parameters.betamfx
@@ -37,16 +35,19 @@
 #' - `mix`, mixture parameters (**brms** only)
 #' - `shiftprop`, shifted proportion parameters (**brms** only)
 #'
+#' Models of class **BGGM** additionally can return the elements `correlation`
+#' and `intercept`.
+#'
+#' Models of class **BFBayesFactor** additionally can return the element
+#' `extra`.
+#'
 #' @examples
 #' data(mtcars)
 #' m <- lm(mpg ~ wt + cyl + vs, data = mtcars)
 #' find_parameters(m)
 #' @export
-find_parameters.BGGM <- function(x,
-                                 component = c("correlation", "conditional", "intercept", "all"),
-                                 flatten = FALSE,
-                                 ...) {
-  component <- match.arg(component)
+find_parameters.BGGM <- function(x, component = "correlation", flatten = FALSE, ...) {
+  component <- validate_argument(component, c("correlation", "conditional", "intercept", "all"))
   l <- switch(component,
     correlation = list(correlation = colnames(get_parameters(x, component = "correlation"))),
     conditional = list(conditional = colnames(get_parameters(x, component = "conditional"))),
@@ -68,19 +69,18 @@ find_parameters.BGGM <- function(x,
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
 find_parameters.BFBayesFactor <- function(x,
-                                          effects = c("all", "fixed", "random"),
-                                          component = c("all", "extra"),
+                                          effects = "all",
+                                          component = "all",
                                           flatten = FALSE,
                                           ...) {
   conditional <- NULL
   random <- NULL
   extra <- NULL
 
-  effects <- match.arg(effects)
-  component <- match.arg(component)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
+  component <- validate_argument(component, c("all", "extra"))
 
   if (.classify_BFBayesFactor(x) == "correlation") {
     conditional <- "rho"
@@ -142,14 +142,10 @@ find_parameters.BFBayesFactor <- function(x,
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
-find_parameters.MCMCglmm <- function(x,
-                                     effects = c("all", "fixed", "random"),
-                                     flatten = FALSE,
-                                     ...) {
+find_parameters.MCMCglmm <- function(x, effects = "all", flatten = FALSE, ...) {
   sc <- summary(x)
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
 
   l <- compact_list(list(
     conditional = rownames(sc$solutions),
@@ -175,19 +171,14 @@ find_parameters.mcmc.list <- function(x, flatten = FALSE, ...) {
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
-find_parameters.bamlss <- function(x,
-                                   flatten = FALSE,
-                                   component = c("all", "conditional", "location", "distributional", "auxiliary"),
-                                   parameters = NULL,
-                                   ...) {
-  component <- match.arg(component)
+find_parameters.bamlss <- function(x, flatten = FALSE, component = "all", parameters = NULL, ...) {
+  component <- validate_argument(component, c("all", "conditional", "location", "distributional", "auxiliary"))
   cn <- colnames(as.data.frame(unclass(x$samples)))
 
   ignore <- grepl("(\\.alpha|logLik|\\.accepted|\\.edf)$", cn)
   cond <- cn[grepl("^(mu\\.p\\.|pi\\.p\\.)", cn) & !ignore]
-  sigma <- cn[startsWith(cn, "sigma.p.") & !ignore]
+  aux <- cn[startsWith(cn, "sigma.p.") & !ignore]
   smooth_terms <- cn[grepl("^mu\\.s\\.(.*)(\\.tau\\d+|\\.edf)$", cn)]
   alpha <- cn[endsWith(cn, ".alpha")]
 
@@ -195,7 +186,7 @@ find_parameters.bamlss <- function(x,
   l <- compact_list(list(
     conditional = cond,
     smooth_terms = smooth_terms,
-    sigma = sigma,
+    sigma = aux,
     alpha = alpha
   )[elements])
 
@@ -217,15 +208,15 @@ find_parameters.brmsfit <- function(x,
                                     flatten = FALSE,
                                     parameters = NULL,
                                     ...) {
-  effects <- match.arg(effects, choices = c("all", "fixed", "random"))
-  component <- match.arg(component, choices = c("all", .all_elements(), "location", "distributional"))
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
+  component <- validate_argument(component, c("all", .all_elements(), "location", "distributional"))
 
   fe <- dimnames(x$fit)$parameters
   # fe <- colnames(as.data.frame(x))
 
   # remove redundant columns. These seem to be new since brms 2.16?
   pattern <- "^[A-z]_\\d\\.\\d\\.(.*)"
-  fe <- fe[!grepl(pattern, fe, perl = TRUE)]
+  fe <- fe[!grepl(pattern, fe)]
 
   is_mv <- NULL
 
@@ -233,21 +224,21 @@ find_parameters.brmsfit <- function(x,
   fe <- fe[!startsWith(fe, "Intercept")]
 
   cond <- fe[grepl("^(b_|bs_|bsp_|bcs_)(?!zi_)(.*)", fe, perl = TRUE)]
-  zi <- fe[grepl("^(b_zi_|bs_zi_|bsp_zi_|bcs_zi_)", fe, perl = TRUE)]
+  zi <- fe[grepl("^(b_zi_|bs_zi_|bsp_zi_|bcs_zi_)", fe)]
   rand <- fe[grepl("(?!.*__(zi|sigma|beta))(?=.*^r_)", fe, perl = TRUE) & !startsWith(fe, "prior_")]
-  randzi <- fe[grepl("^r_(.*__zi)", fe, perl = TRUE)]
+  randzi <- fe[grepl("^r_(.*__zi)", fe)]
   rand_sd <- fe[grepl("(?!.*_zi)(?=.*^sd_)", fe, perl = TRUE)]
-  randzi_sd <- fe[grepl("^sd_(.*_zi)", fe, perl = TRUE)]
+  randzi_sd <- fe[grepl("^sd_(.*_zi)", fe)]
   rand_cor <- fe[grepl("(?!.*_zi)(?=.*^cor_)", fe, perl = TRUE)]
-  randzi_cor <- fe[grepl("^cor_(.*_zi)", fe, perl = TRUE)]
+  randzi_cor <- fe[grepl("^cor_(.*_zi)", fe)]
   simo <- fe[startsWith(fe, "simo_")]
   car_struc <- fe[fe %in% c("car", "sdcar")]
   smooth_terms <- fe[startsWith(fe, "sds_")]
   priors <- fe[startsWith(fe, "prior_")]
-  sigma <- fe[startsWith(fe, "sigma_") | grepl("sigma", fe, fixed = TRUE)]
-  randsigma <- fe[grepl("^r_(.*__sigma)", fe, perl = TRUE)]
-  beta <- fe[grepl("beta", fe, fixed = TRUE)]
-  randbeta <- fe[grepl("^r_(.*__beta)", fe, perl = TRUE)]
+  sigma_param <- fe[startsWith(fe, "sigma_") | grepl("sigma", fe, fixed = TRUE)]
+  randsigma <- fe[grepl("^r_(.*__sigma)", fe)]
+  fixed_beta <- fe[grepl("beta", fe, fixed = TRUE)]
+  rand_beta <- fe[grepl("^r_(.*__beta)", fe)]
   mix <- fe[grepl("mix", fe, fixed = TRUE)]
   shiftprop <- fe[grepl("shiftprop", fe, fixed = TRUE)]
   dispersion <- fe[grepl("dispersion", fe, fixed = TRUE)]
@@ -256,8 +247,8 @@ find_parameters.brmsfit <- function(x,
   # if auxiliary is modelled directly, we need to remove duplicates here
   # e.g. "b_sigma..." is in "cond" and in "sigma" now, we just need it in "cond".
 
-  sigma <- setdiff(sigma, c(cond, rand, rand_sd, rand_cor, randsigma, car_struc, "prior_sigma"))
-  beta <- setdiff(beta, c(cond, rand, rand_sd, randbeta, rand_cor, car_struc))
+  sigma_param <- setdiff(sigma_param, c(cond, rand, rand_sd, rand_cor, randsigma, car_struc, "prior_sigma"))
+  fixed_beta <- setdiff(fixed_beta, c(cond, rand, rand_sd, rand_beta, rand_cor, car_struc))
   auxiliary <- setdiff(auxiliary, c(cond, rand, rand_sd, rand_cor, car_struc))
 
   l <- compact_list(list(
@@ -267,10 +258,10 @@ find_parameters.brmsfit <- function(x,
     zero_inflated_random = c(randzi, randzi_sd, randzi_cor),
     simplex = simo,
     smooth_terms = smooth_terms,
-    sigma = sigma,
+    sigma = sigma_param,
     sigma_random = randsigma,
-    beta = beta,
-    beta_random = randbeta,
+    beta = fixed_beta,
+    beta_random = rand_beta,
     dispersion = dispersion,
     mix = mix,
     shiftprop = shiftprop,
@@ -320,15 +311,15 @@ find_parameters.brmsfit <- function(x,
       }
 
       if (object_has_names(l, "sigma")) {
-        sigma <- l$sigma[grepl(sprintf("^sigma_\\Q%s\\E$", i), l$sigma)]
+        sigma_param <- l$sigma[grepl(sprintf("^sigma_\\Q%s\\E$", i), l$sigma)]
       } else {
-        sigma <- NULL
+        sigma_param <- NULL
       }
 
       if (object_has_names(l, "beta")) {
-        beta <- l$beta[grepl(sprintf("^beta_\\Q%s\\E$", i), l$sigma)]
+        fixed_beta <- l$beta[grepl(sprintf("^beta_\\Q%s\\E$", i), l$beta)]
       } else {
-        beta <- NULL
+        fixed_beta <- NULL
       }
 
       if (object_has_names(l, "dispersion")) {
@@ -368,8 +359,8 @@ find_parameters.brmsfit <- function(x,
         zero_inflated_random = zero_inflated_random,
         simplex = simplex,
         smooth_terms = smooth_terms,
-        sigma = sigma,
-        beta = beta,
+        sigma = sigma_param,
+        beta = fixed_beta,
         dispersion = dispersion,
         mix = mix,
         priors = priors,
@@ -396,13 +387,8 @@ find_parameters.brmsfit <- function(x,
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
-find_parameters.bayesx <- function(x,
-                                   component = c("all", "conditional", "smooth_terms"),
-                                   flatten = FALSE,
-                                   parameters = NULL,
-                                   ...) {
+find_parameters.bayesx <- function(x, component = "all", flatten = FALSE, parameters = NULL, ...) {
   cond <- rownames(stats::coef(x))
   smooth_terms <- rownames(x$smooth.hyp)
 
@@ -413,7 +399,7 @@ find_parameters.bayesx <- function(x,
 
   l <- .filter_pars(l, parameters)
 
-  component <- match.arg(component)
+  component <- validate_argument(component, c("all", "conditional", "smooth_terms"))
   elements <- .get_elements(effects = "all", component)
   l <- compact_list(l[elements])
 
@@ -425,11 +411,10 @@ find_parameters.bayesx <- function(x,
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
 find_parameters.stanreg <- function(x,
-                                    effects = c("all", "fixed", "random"),
-                                    component = c("location", "all", "conditional", "smooth_terms", "sigma", "distributional", "auxiliary"),
+                                    effects = "all",
+                                    component = "location",
                                     flatten = FALSE,
                                     parameters = NULL,
                                     ...) {
@@ -441,7 +426,7 @@ find_parameters.stanreg <- function(x,
   rand <- fe[startsWith(fe, "b[")]
   rand_sd <- fe[startsWith(fe, "Sigma[")]
   smooth_terms <- fe[startsWith(fe, "smooth_sd")]
-  sigma <- fe[grepl("sigma", fe, fixed = TRUE)]
+  sigma_param <- fe[grepl("sigma", fe, fixed = TRUE)]
   auxiliary <- fe[grepl("(shape|phi|precision)", fe)]
 
   # remove auxiliary from conditional
@@ -451,14 +436,14 @@ find_parameters.stanreg <- function(x,
     conditional = cond,
     random = c(rand, rand_sd),
     smooth_terms = smooth_terms,
-    sigma = sigma,
+    sigma = sigma_param,
     auxiliary = auxiliary
   ))
 
   l <- .filter_pars(l, parameters)
 
-  effects <- match.arg(effects)
-  component <- match.arg(component)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
+  component <- validate_argument(component, c("location", "all", "conditional", "smooth_terms", "sigma", "distributional", "auxiliary")) # nolint
   elements <- .get_elements(effects, component)
   l <- compact_list(l[elements])
 
@@ -484,11 +469,10 @@ find_parameters.bcplm <- function(x,
 }
 
 
-#' @rdname find_parameters.BGGM
 #' @export
 find_parameters.stanmvreg <- function(x,
-                                      effects = c("all", "fixed", "random"),
-                                      component = c("location", "all", "conditional", "smooth_terms", "sigma", "distributional", "auxiliary"),
+                                      effects = "all",
+                                      component = "location",
                                       flatten = FALSE,
                                       parameters = NULL,
                                       ...) {
@@ -499,7 +483,7 @@ find_parameters.stanmvreg <- function(x,
   rand <- fe[startsWith(fe, "b[")]
   rand_sd <- fe[startsWith(fe, "Sigma[")]
   smooth_terms <- fe[startsWith(fe, "smooth_sd")]
-  sigma <- fe[endsWith(fe, "|sigma") & .grep_non_smoothers(fe)]
+  sigma_param <- fe[endsWith(fe, "|sigma") & .grep_non_smoothers(fe)]
   auxiliary <- fe[grepl("(shape|phi|precision)", fe)]
 
   # remove auxiliary from conditional
@@ -509,7 +493,7 @@ find_parameters.stanmvreg <- function(x,
     conditional = cond,
     random = c(rand, rand_sd),
     smooth_terms = smooth_terms,
-    sigma = sigma,
+    sigma = sigma_param,
     auxiliary = auxiliary
   ))
 
@@ -552,8 +536,8 @@ find_parameters.stanmvreg <- function(x,
   l <- Map(c, l.cond, l.random, l.sigma)
   l <- .filter_pars(l, parameters, is_mv = TRUE)
 
-  effects <- match.arg(effects)
-  component <- match.arg(component)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
+  component <- validate_argument(component, c("location", "all", "conditional", "smooth_terms", "sigma", "distributional", "auxiliary")) # nolint
   elements <- .get_elements(effects, component)
   l <- lapply(l, function(i) compact_list(i[elements]))
 
@@ -567,14 +551,12 @@ find_parameters.stanmvreg <- function(x,
 }
 
 
-
 # Simulation models -----------------------------
 
 
-#' @rdname find_parameters.BGGM
 #' @export
 find_parameters.sim.merMod <- function(x,
-                                       effects = c("all", "fixed", "random"),
+                                       effects = "all",
                                        flatten = FALSE,
                                        parameters = NULL,
                                        ...) {
@@ -588,7 +570,7 @@ find_parameters.sim.merMod <- function(x,
 
   l <- .filter_pars(l, parameters)
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
   elements <- .get_elements(effects, component = "all")
   l <- compact_list(l[elements])
 
@@ -640,11 +622,7 @@ find_parameters.bayesQR <- function(x, flatten = FALSE, parameters = NULL, ...) 
 
 
 #' @export
-find_parameters.stanfit <- function(x,
-                                    effects = c("all", "fixed", "random"),
-                                    flatten = FALSE,
-                                    parameters = NULL,
-                                    ...) {
+find_parameters.stanfit <- function(x, effects = "all", flatten = FALSE, parameters = NULL, ...) {
   fe <- colnames(as.data.frame(x))
 
   cond <- fe[grepl("^(?!(b\\[|sigma|Sigma|lp__))", fe, perl = TRUE) & .grep_non_smoothers(fe)]
@@ -657,7 +635,7 @@ find_parameters.stanfit <- function(x,
 
   l <- .filter_pars(l, parameters)
 
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
   elements <- .get_elements(effects, component = "all")
   l <- compact_list(l[elements])
 

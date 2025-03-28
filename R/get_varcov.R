@@ -2,25 +2,24 @@
 #' @name get_varcov
 #'
 #' @description
-#'
 #' Returns the variance-covariance, as retrieved by `stats::vcov()`, but works
 #' for more model objects that probably don't provide a `vcov()`-method.
 #'
 #'
 #' @param x A model.
 #' @param component Should the complete variance-covariance matrix of the model
-#'   be returned, or only for specific model components only (like count or
-#'   zero-inflated model parts)? Applies to models with zero-inflated component,
-#'   or models with precision (e.g. `betareg`) component. `component` may be one
-#'   of `"conditional"`, `"zi"`, `"zero-inflated"`, `"dispersion"`,
-#'   `"precision"`, or `"all"`. May be abbreviated. Note that the *conditional*
-#'   component is also called *count* or *mean* component, depending on the
-#'   model.
+#' be returned, or only for specific model components only (like count or
+#' zero-inflated model parts)? Applies to models with zero-inflated component,
+#' or models with precision (e.g. `betareg`) component. `component` may be one
+#' of `"conditional"`, `"zi"`, `"zero-inflated"`, `"dispersion"`, `"precision"`,
+#' or `"all"`. May be abbreviated. Note that the *conditional* component also
+#' refers to the *count* or *mean* component - names may differ, depending on
+#' the modeling package. See section _Model components_ for details.
 #' @param effects Should the complete variance-covariance matrix of the model
-#'   be returned, or only for specific model parameters only? Currently only
-#'   applies to models of class `mixor`.
+#' be returned, or only for specific model parameters only? Currently only
+#' applies to models of class `mixor` and `MixMod`.
 #' @param complete Logical, if `TRUE`, for `aov`, returns the full
-#'   variance-covariance matrix.
+#' variance-covariance matrix.
 #' @param vcov Variance-covariance matrix used to compute uncertainty estimates
 #' (e.g., for robust standard errors). This argument accepts a covariance
 #' matrix, a function which returns a covariance matrix, or a string which
@@ -28,21 +27,28 @@
 #'  * A covariance matrix
 #'  * A function which returns a covariance matrix (e.g., `stats::vcov()`)
 #'  * A string which indicates the kind of uncertainty estimates to return.
-#'    - Heteroskedasticity-consistent: `"vcovHC"`, `"HC"`, `"HC0"`, `"HC1"`,
-#'      `"HC2"`, `"HC3"`, `"HC4"`, `"HC4m"`, `"HC5"`. See `?sandwich::vcovHC`
-#'    - Cluster-robust: `"vcovCR"`, `"CR0"`, `"CR1"`, `"CR1p"`, `"CR1S"`,
-#'      `"CR2"`, `"CR3"`. See `?clubSandwich::vcovCR()`
-#'    - Bootstrap: `"vcovBS"`, `"xy"`, `"residual"`, `"wild"`, `"mammen"`,
-#'      `"webb"`. See `?sandwich::vcovBS`
-#'    - Other `sandwich` package functions: `"vcovHAC"`, `"vcovPC"`, `"vcovCL"`,
-#'      `"vcovPL"`.
+#'    - Heteroskedasticity-consistent: `"HC"`, `"HC0"`, `"HC1"`, `"HC2"`,
+#'      `"HC3"`, `"HC4"`, `"HC4m"`, `"HC5"`. See `?sandwich::vcovHC`
+#'    - Cluster-robust: `"CR"`, `"CR0"`, `"CR1"`, `"CR1p"`, `"CR1S"`, `"CR2"`,
+#'      `"CR3"`. See `?clubSandwich::vcovCR`
+#'    - Bootstrap: `"BS"`, `"xy"`, `"residual"`, `"wild"`, `"mammen"`,
+#'      `"fractional"`, `"jackknife"`, `"norm"`, `"webb"`. See
+#'      `?sandwich::vcovBS`
+#'    - Other `sandwich` package functions: `"HAC"`, `"PC"`, `"CL"`, `"OPG"`,
+#'      `"PL"`.
+#'    - Kenward-Roger approximation: `kenward-roger`. See `?pbkrtest::vcovAdj`.
+#'
+#' One exception are models of class `glmgee`, which have pre-defined options
+#' for the variance-covariance matrix calculation. These are `"robust"`,
+#' `"df-adjusted"`, `"model"`, `"bias-corrected"`, and `"jackknife"`. See
+#' `?glmtoolbox::vcov.glmgee` for details.
 #' @param vcov_args List of arguments to be passed to the function identified by
-#'   the `vcov` argument. This function is typically supplied by the **sandwich**
-#'   or **clubSandwich** packages. Please refer to their documentation (e.g.,
-#'   `?sandwich::vcovHAC`) to see the list of available arguments. If no estimation
-#'   type (argument `type`) is given, the default type for `"HC"` (or `"vcovHC"`)
-#'   equals the default from the **sandwich** package; for type `"CR"` (or
-#'   `"vcoCR"`), the default is set to `"CR3"`.
+#'   the `vcov` argument. This function is typically supplied by the
+#'   **sandwich** or **clubSandwich** packages. Please refer to their
+#'   documentation (e.g., `?sandwich::vcovHAC`) to see the list of available
+#'   arguments. If no estimation type (argument `type`) is given, the default
+#'   type for `"HC"` equals the default from the **sandwich** package; for type
+#'   `"CR"`, the default is set to `"CR3"`.
 #' @param verbose Toggle warnings.
 #' @param ... Currently not used.
 #'
@@ -51,6 +57,8 @@
 #'   ensures that it is still possible, for instance, to calculate standard
 #'   errors of model parameters. A message is shown when the matrix is negative
 #'   definite and a corrected matrix is returned.
+#'
+#' @inheritSection find_predictors Model components
 #'
 #' @return The variance-covariance matrix, as `matrix`-object.
 #'
@@ -116,7 +124,6 @@ get_varcov.HLfit <- get_varcov.default
 get_varcov.geeglm <- get_varcov.default
 
 
-
 # fixest ---------------------------------------------
 
 #' @export
@@ -132,6 +139,16 @@ get_varcov.fixest <- function(x,
   do.call("FUN", my_args)
 }
 
+
+#' @export
+get_varcov.asym <- function(x, ...) {
+  out <- get_varcov.default(x, ...)
+  colnames(out) <- gsub("^plus__", "+", colnames(out))
+  rownames(out) <- gsub("^plus__", "+", rownames(out))
+  colnames(out) <- gsub("^minus__", "-", colnames(out))
+  rownames(out) <- gsub("^minus__", "-", rownames(out))
+  out
+}
 
 
 # mlm ---------------------------------------------
@@ -154,11 +171,24 @@ get_varcov.mlm <- function(x,
 }
 
 
-
 # models with special components ---------------------------------------------
 
 
 #' @rdname get_varcov
+#' @export
+get_varcov.glmgee <- function(x,
+                              verbose = TRUE,
+                              vcov = "robust",
+                              ...) {
+  vcov <- validate_argument(
+    vcov,
+    c("robust", "df-adjusted", "model", "bias-corrected", "jackknife")
+  )
+  vc <- suppressWarnings(stats::vcov(x, type = vcov))
+  .process_vcov(vc, verbose, ...)
+}
+
+
 #' @export
 get_varcov.nestedLogit <- function(x,
                                    component = "all",
@@ -197,14 +227,13 @@ get_varcov.nestedLogit <- function(x,
 }
 
 
-#' @rdname get_varcov
 #' @export
 get_varcov.betareg <- function(x,
-                               component = c("conditional", "precision", "all"),
+                               component = "conditional",
                                verbose = TRUE,
                                ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "precision", "all"))
 
   vc <- switch(component,
     conditional = stats::vcov(object = x, model = "mean"),
@@ -217,11 +246,11 @@ get_varcov.betareg <- function(x,
 
 #' @export
 get_varcov.DirichletRegModel <- function(x,
-                                         component = c("conditional", "precision", "all"),
+                                         component = "conditional",
                                          verbose = TRUE,
                                          ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "precision", "all"))
   if (x$parametrization == "common") {
     vc <- .safe_vcov(x)
   } else if (component == "conditional") {
@@ -239,13 +268,10 @@ get_varcov.DirichletRegModel <- function(x,
 }
 
 
-#' @rdname get_varcov
 #' @export
-get_varcov.clm2 <- function(x,
-                            component = c("all", "conditional", "scale"),
-                            ...) {
+get_varcov.clm2 <- function(x, component = "all", ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("all", "conditional", "scale"))
 
   n_intercepts <- length(x$xi)
   n_location <- length(x$beta)
@@ -277,11 +303,11 @@ get_varcov.clmm2 <- get_varcov.clm2
 
 #' @export
 get_varcov.glmx <- function(x,
-                            component = c("all", "conditional", "extra"),
+                            component = "all",
                             verbose = TRUE,
                             ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("all", "conditional", "extra"))
   vc <- stats::vcov(object = x)
 
   if (component != "all") {
@@ -294,7 +320,7 @@ get_varcov.glmx <- function(x,
 
 #' @export
 get_varcov.pgmm <- function(x,
-                            component = c("conditional", "all"),
+                            component = "conditional",
                             vcov = NULL,
                             vcov_args = NULL,
                             verbose = TRUE,
@@ -302,7 +328,7 @@ get_varcov.pgmm <- function(x,
   .check_get_varcov_dots(x, ...)
   # process vcov-argument
   vcov <- .check_vcov_args(x, vcov = vcov, verbose = verbose, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "all"))
 
   if (is.null(vcov)) {
     vc <- .safe_vcov(x)
@@ -324,11 +350,9 @@ get_varcov.pgmm <- function(x,
 
 
 #' @export
-get_varcov.selection <- function(x,
-                                 component = c("all", "selection", "outcome", "auxiliary"),
-                                 ...) {
+get_varcov.selection <- function(x, component = "all", ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("all", "selection", "outcome", "auxiliary"))
   vc <- stats::vcov(object = x)
 
   if (component != "all") {
@@ -346,11 +370,14 @@ get_varcov.selection <- function(x,
 
 #' @export
 get_varcov.mvord <- function(x,
-                             component = c("all", "conditional", "thresholds", "correlation"),
+                             component = "all",
                              verbose = TRUE,
                              ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "thresholds", "correlation")
+  )
   vc <- .safe_vcov(x)
 
   if (component != "all") {
@@ -366,12 +393,9 @@ get_varcov.mvord <- function(x,
 
 
 #' @export
-get_varcov.mjoint <- function(x,
-                              component = c("all", "conditional", "survival"),
-                              verbose = TRUE,
-                              ...) {
+get_varcov.mjoint <- function(x, component = "all", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("all", "conditional", "survival"))
   vc <- .safe_vcov(x)
 
   keep <- match(find_parameters(x, flatten = TRUE, component = component), rownames(vc))
@@ -381,12 +405,15 @@ get_varcov.mjoint <- function(x,
 
 
 #' @export
-get_varcov.mhurdle <- function(x,
-                               component = c("all", "conditional", "zi", "zero_inflated", "infrequent_purchase", "ip", "auxiliary"), # nolint
-                               verbose = TRUE,
-                               ...) {
+get_varcov.mhurdle <- function(x, component = "all", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(
+    component,
+    c(
+      "all", "conditional", "zi", "zero_inflated", "infrequent_purchase",
+      "ip", "auxiliary"
+    )
+  )
   vc <- .safe_vcov(x)
 
   # rownames(vc) <- gsub("^(h1|h2|h3)\\.(.*)", "\\2", rownames(vc))
@@ -398,11 +425,10 @@ get_varcov.mhurdle <- function(x,
 }
 
 
-#' @rdname get_varcov
 #' @export
-get_varcov.truncreg <- function(x, component = c("conditional", "all"), verbose = TRUE, ...) {
+get_varcov.truncreg <- function(x, component = "conditional", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "all"))
   vc <- .safe_vcov(x)
 
   if (component == "conditional") {
@@ -413,9 +439,9 @@ get_varcov.truncreg <- function(x, component = c("conditional", "all"), verbose 
 
 
 #' @export
-get_varcov.gamlss <- function(x, component = c("conditional", "all"), verbose = TRUE, ...) {
+get_varcov.gamlss <- function(x, component = "conditional", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "all"))
   vc <- .safe_vcov(x)
 
   if (component == "conditional") {
@@ -426,17 +452,13 @@ get_varcov.gamlss <- function(x, component = c("conditional", "all"), verbose = 
 }
 
 
-
-
-
-
 # Zero-Inflated models ----------------------------------------------------
 
 
 #' @rdname get_varcov
 #' @export
 get_varcov.hurdle <- function(x,
-                              component = c("conditional", "zero_inflated", "zi", "all"),
+                              component = "conditional",
                               vcov = NULL,
                               vcov_args = NULL,
                               verbose = TRUE,
@@ -445,7 +467,7 @@ get_varcov.hurdle <- function(x,
   # process vcov-argument
   vcov <- .check_vcov_args(x, vcov = vcov, verbose = verbose, ...)
 
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "zero_inflated", "zi", "all"))
 
   if (is.null(vcov)) {
     vc <- switch(component,
@@ -480,14 +502,10 @@ get_varcov.zeroinfl <- get_varcov.hurdle
 get_varcov.zerocount <- get_varcov.hurdle
 
 #' @export
-get_varcov.zcpglm <- function(x,
-                              component = c("conditional", "zero_inflated", "zi", "all"),
-                              verbose = TRUE,
-                              ...) {
+get_varcov.zcpglm <- function(x, component = "conditional", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "zero_inflated", "zi", "all"))
 
-  # installed?
   check_if_installed("cplm")
 
   vc <- cplm::vcov(x)
@@ -504,18 +522,16 @@ get_varcov.zcpglm <- function(x,
 }
 
 
-
 # Zero-Inflated mixed models ------------------------------------------------
 
 
-#' @rdname get_varcov
 #' @export
-get_varcov.glmmTMB <- function(x,
-                               component = c("conditional", "zero_inflated", "zi", "dispersion", "all"),
-                               verbose = TRUE,
-                               ...) {
+get_varcov.glmmTMB <- function(x, component = "conditional", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(
+    component,
+    c("conditional", "zero_inflated", "zi", "dispersion", "all")
+  )
 
   vc <- switch(component,
     conditional = .safe_vcov(x)[["cond"]],
@@ -528,11 +544,10 @@ get_varcov.glmmTMB <- function(x,
 }
 
 
-#' @rdname get_varcov
 #' @export
 get_varcov.MixMod <- function(x,
-                              effects = c("fixed", "random"),
-                              component = c("conditional", "zero_inflated", "zi", "dispersion", "auxiliary", "all"),
+                              effects = "fixed",
+                              component = "conditional",
                               verbose = TRUE,
                               ...) {
   .check_get_varcov_dots(x, ...)
@@ -542,8 +557,11 @@ get_varcov.MixMod <- function(x,
   # does not seem to be a documented argument for the `MixMod` class.
   robust <- isTRUE(list(...)[["robust"]])
 
-  component <- match.arg(component)
-  effects <- match.arg(effects)
+  component <- validate_argument(
+    component,
+    c("conditional", "zero_inflated", "zi", "dispersion", "auxiliary", "all")
+  )
+  effects <- validate_argument(effects, c("fixed", "random"))
 
   random_vc <- stats::vcov(x, parm = "var-cov", sandwich = robust)
 
@@ -577,20 +595,25 @@ get_varcov.MixMod <- function(x,
 }
 
 
-
-
 # Bayesian models ------------------------------------------------
 
 
-#' @rdname get_varcov
 #' @export
 get_varcov.brmsfit <- function(x, component = "conditional", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component, choices = c("all", .all_elements()))
+  component <- validate_argument(component, c("all", .all_elements()))
   params <- find_parameters(x, effects = "fixed", component = component, flatten = TRUE)
   params <- gsub("^b_", "", params)
 
-  vc <- .safe_vcov(x)[params, params, drop = FALSE]
+  # get full varcov
+  vc <- .safe_vcov(x)
+
+  # check if we can filter - for models with monotonic effects, we have
+  # different parameter names, this filtering will fail here
+  if (all(params %in% colnames(vc))) {
+    vc <- vc[params, params, drop = FALSE]
+  }
+
   .process_vcov(vc, verbose, ...)
 }
 
@@ -598,14 +621,13 @@ get_varcov.brmsfit <- function(x, component = "conditional", verbose = TRUE, ...
 # mfx models -------------------------------------------------------
 
 
-#' @rdname get_varcov
 #' @export
 get_varcov.betamfx <- function(x,
-                               component = c("conditional", "precision", "all"),
+                               component = "conditional",
                                verbose = TRUE,
                                ...) {
   .check_get_varcov_dots(x, ...)
-  component <- match.arg(component)
+  component <- validate_argument(component, c("conditional", "precision", "all"))
   get_varcov.betareg(x$fit, component = component, verbose = verbose, ...)
 }
 
@@ -832,14 +854,12 @@ get_varcov.cpglmm <- function(x, verbose = TRUE, ...) {
 get_varcov.cpglm <- get_varcov.cpglmm
 
 
-
 #' @export
 get_varcov.cglm <- function(x, verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
   vc <- as.matrix(x$var)
   .process_vcov(vc, verbose, ...)
 }
-
 
 
 #' @export
@@ -854,12 +874,11 @@ get_varcov.mle2 <- function(x, verbose = TRUE, ...) {
 get_varcov.mle <- get_varcov.mle2
 
 
-
 #' @rdname get_varcov
 #' @export
-get_varcov.mixor <- function(x, effects = c("all", "fixed", "random"), verbose = TRUE, ...) {
+get_varcov.mixor <- function(x, effects = "all", verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  effects <- match.arg(effects)
+  effects <- validate_argument(effects, c("all", "fixed", "random"))
   params <- find_parameters(x, effects = effects, flatten = TRUE)
   vc <- as.matrix(.safe_vcov(x))[params, params, drop = FALSE]
   .process_vcov(vc, verbose, ...)
@@ -945,7 +964,7 @@ get_varcov.feis <- function(x, verbose = TRUE, ...) {
 #' @export
 get_varcov.glimML <- function(x, verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  # installed?
+
   check_if_installed("aod")
 
   vc <- aod::vcov(x)
@@ -956,7 +975,7 @@ get_varcov.glimML <- function(x, verbose = TRUE, ...) {
 #' @export
 get_varcov.vglm <- function(x, verbose = TRUE, ...) {
   .check_get_varcov_dots(x, ...)
-  # installed?
+
   check_if_installed("VGAM")
   vc <- VGAM::vcov(x)
   .process_vcov(vc, verbose, ...)
@@ -986,7 +1005,6 @@ get_varcov.lmRob <- function(x, verbose = TRUE, ...) {
 
 #' @export
 get_varcov.glmRob <- get_varcov.lmRob
-
 
 
 #' @export
@@ -1023,7 +1041,6 @@ get_varcov.gee <- function(x, verbose = TRUE, ...) {
 
 #' @export
 get_varcov.LORgee <- get_varcov.gee
-
 
 
 # helper-functions -----------------------------------------------------
@@ -1116,7 +1133,6 @@ get_varcov.LORgee <- get_varcov.gee
 }
 
 
-
 .get_weighted_varcov <- function(x, cov_unscaled) {
   ssd <- .weighted_crossprod(stats::residuals(x), w = x$weights)
   weight_df <- sum(x$weights)
@@ -1160,6 +1176,9 @@ get_varcov.LORgee <- get_varcov.gee
       sprintf("The `vcov` argument of the `insight::get_varcov()` function is not yet supported for models of class `%s`.", paste(class(x), collapse = "/")) # nolint
     )
   }
+  if ("robust" %in% names(dots) && !is.null(dots[["robust"]])) {
+    format_warning("The `robust` argument is no longer supported. Please use the `vcov` and `vcov_args` instead.") # nolint
+  }
 }
 
 
@@ -1170,16 +1189,5 @@ get_varcov.LORgee <- get_varcov.gee
   if (is.null(vcov) && "vcov_estimation" %in% names(dots)) {
     vcov <- dots[["vcov_estimation"]]
   }
-
-  if ("robust" %in% names(dots)) {
-    # default robust covariance
-    if (is.null(vcov)) {
-      vcov <- "HC3"
-    }
-    if (isTRUE(verbose)) {
-      format_warning("The `robust` argument is deprecated. Please use `vcov` instead.")
-    }
-  }
-
   vcov
 }

@@ -4,6 +4,7 @@
 #' @description Returns all lowest to highest order interaction terms from a model.
 #'
 #' @inheritParams find_predictors
+#' @inheritSection find_predictors Model components
 #'
 #' @return A list of character vectors that represent the interaction terms.
 #'  Depending on `component`, the returned list has following
@@ -26,10 +27,11 @@
 #' m <- lm(mpg ~ wt * cyl + vs * hp * gear + carb, data = mtcars)
 #' find_interactions(m)
 #' @export
-find_interactions <- function(x,
-                              component = c("all", "conditional", "zi", "zero_inflated", "dispersion", "instruments"),
-                              flatten = FALSE) {
-  component <- match.arg(component)
+find_interactions <- function(x, component = "all", flatten = FALSE) {
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "zi", "zero_inflated", "dispersion", "instruments")
+  )
 
   .find_interactions(x,
     effects = "fixed",
@@ -45,7 +47,7 @@ find_interactions <- function(x,
                                component,
                                flatten,
                                main_effects = FALSE) {
-  f <- find_formula(x)
+  f <- find_formula(x, verbose = FALSE)
   is_mv <- is_multivariate(f)
   elements <- .get_elements(effects = effects, component = component)
 
@@ -71,13 +73,13 @@ find_interactions <- function(x,
   if (is.null(f)) {
     return(NULL)
   }
-  terms <- labels(stats::terms(f))
+  model_terms <- labels(stats::terms(f))
   if (main_effects) {
-    terms
+    model_terms
   } else {
-    interaction_terms <- grepl(":", terms, fixed = TRUE)
+    interaction_terms <- grepl(":", model_terms, fixed = TRUE)
     if (any(interaction_terms)) {
-      terms[interaction_terms]
+      model_terms[interaction_terms]
     } else {
       NULL
     }

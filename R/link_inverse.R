@@ -29,7 +29,6 @@ link_inverse <- function(x, ...) {
 }
 
 
-
 # Default method ---------------------------------------
 
 
@@ -43,17 +42,45 @@ link_inverse.default <- function(x, ...) {
   if (inherits(x, "Zelig-relogit")) {
     stats::make.link(link = "logit")$linkinv
   } else {
-    .safe(stats::family(x)$linkinv)
+    .extract_generic_linkinv(x)
   }
 }
 
+.extract_generic_linkinv <- function(x, default_link = NULL) {
+  # general approach
+  out <- .safe(stats::family(x)$linkinv)
+  # if it fails, try to retrieve from model information
+  if (is.null(out)) {
+    # get model family, consider special gam-case
+    ff <- .gam_family(x)
+    if ("linkfun" %in% names(ff)) {
+      # return link function, if exists
+      out <- ff$linkinv
+    } else if ("link" %in% names(ff) && is.character(ff$link)) {
+      # else, create link function from link-string
+      out <- .safe(stats::make.link(link = ff$link)$linkinv)
+      # or match the function - for "exp()", make.link() won't work
+      if (is.null(out)) {
+        out <- .safe(match.fun(ff$link))
+      }
+    }
+  }
+  # if all fails, force default link
+  if (is.null(out) && !is.null(default_link)) {
+    out <- switch(default_link,
+      identity = .safe(stats::gaussian(link = "identity")$linkinv),
+      .safe(stats::make.link(link = default_link)$linkinv)
+    )
+  }
+  out
+}
 
 
 # GLM families ---------------------------------------------------
 
 #' @export
 link_inverse.glm <- function(x, ...) {
-  tryCatch(stats::family(x)$linkinv, error = function(x) NULL)
+  .extract_generic_linkinv(x, "logit")
 }
 
 #' @export
@@ -96,8 +123,11 @@ link_inverse.flexsurvreg <- function(x, ...) {
 
 #' @export
 link_inverse.lm <- function(x, ...) {
-  stats::gaussian(link = "identity")$linkinv
+  .extract_generic_linkinv(x, "identity")
 }
+
+#' @export
+link_inverse.asym <- link_inverse.lm
 
 #' @export
 link_inverse.phylolm <- link_inverse.lm
@@ -201,7 +231,8 @@ link_inverse.speedlm <- link_inverse.lm
 #' @export
 link_inverse.afex_aov <- link_inverse.lm
 
-
+#' @export
+link_inverse.svy2lme <- link_inverse.lm
 
 
 #' @rdname link_inverse
@@ -213,7 +244,6 @@ link_inverse.betareg <- function(x, what = c("mean", "precision"), ...) {
     precision = x$link$precision$linkinv
   )
 }
-
 
 
 #' @rdname link_inverse
@@ -231,12 +261,11 @@ link_inverse.DirichletRegModel <- function(x, what = c("mean", "precision"), ...
 }
 
 
-
 # Logit links -----------------------------------
 
 #' @export
 link_inverse.gmnl <- function(x, ...) {
-  stats::make.link("logit")$linkinv
+  .extract_generic_linkinv(x, "logit")
 }
 
 #' @export
@@ -299,6 +328,14 @@ link_inverse.flic <- link_inverse.gmnl
 #' @export
 link_inverse.multinom <- link_inverse.gmnl
 
+#' @export
+link_inverse.multinom_weightit <- function(x, ...) {
+  stats::make.link(link = x$family$link)$linkinv
+}
+
+#' @export
+link_inverse.ordinal_weightit <- link_inverse.multinom_weightit
+
 
 # Probit link ------------------------
 
@@ -330,7 +367,6 @@ link_inverse.hurdle <- link_inverse.zeroinfl
 link_inverse.zerotrunc <- link_inverse.zeroinfl
 
 
-
 # Ordinal models -----------------------------------
 
 #' @export
@@ -349,7 +385,6 @@ link_inverse.serp <- link_inverse.clm
 
 #' @export
 link_inverse.mixor <- link_inverse.clm
-
 
 
 # mfx models ------------------------------------------------------
@@ -389,12 +424,25 @@ link_inverse.probitirr <- link_inverse.logitmfx
 link_inverse.negbinirr <- link_inverse.logitmfx
 
 
-
 # Other models ----------------------------
 
 #' @export
 link_inverse.Rchoice <- function(x, ...) {
   stats::make.link(link = x$link)$linkinv
+}
+
+
+#' @export
+link_inverse.oohbchoice <- function(x, ...) {
+  link <- switch(x$distribution,
+    normal = "identity",
+    weibull = ,
+    "log-normal" = "log",
+    logistic = ,
+    ## TODO: not sure about log-logistic link-inverse
+    "log-logistic" = "logit"
+  )
+  stats::make.link(link = link)$linkinv
 }
 
 
@@ -423,7 +471,7 @@ link_inverse.cglm <- function(x, ...) {
   method <- parse(text = safe_deparse(x$call))[[1]]$method
 
   if (!is.null(method) && method == "clm") {
-    link <- "identiy"
+    link <- "identity"
   }
   stats::make.link(link = link)$linkinv
 }
@@ -478,6 +526,9 @@ link_inverse.glmx <- function(x, ...) {
 link_inverse.bife <- function(x, ...) {
   x$family$linkinv
 }
+
+#' @export
+link_inverse.glmgee <- link_inverse.bife
 
 
 #' @export
@@ -637,13 +688,18 @@ link_inverse.brmsfit <- function(x, ...) {
 link_inverse.gamlss <- function(x, what = c("mu", "sigma", "nu", "tau"), ...) {
   what <- match.arg(what)
   faminfo <- get(x$family[1], asNamespace("gamlss"))()
-  switch(what,
-    mu = faminfo$mu.linkinv,
-    sigma = faminfo$sigma.linkinv,
-    nu = faminfo$nu.linkinv,
-    tau = faminfo$tau.linkinv,
-    faminfo$mu.linkinv
-  )
+  # exceptions
+  if (faminfo$family[1] == "LOGNO") {
+    function(eta) pmax(exp(eta), .Machine$double.eps)
+  } else {
+    switch(what,
+      mu = faminfo$mu.linkinv,
+      sigma = faminfo$sigma.linkinv,
+      nu = faminfo$nu.linkinv,
+      tau = faminfo$tau.linkinv,
+      faminfo$mu.linkinv
+    )
+  }
 }
 
 
@@ -716,11 +772,9 @@ link_inverse.mipo <- function(x, ...) {
 
 #' @export
 link_inverse.mira <- function(x, ...) {
-  # installed?
   check_if_installed("mice")
   link_inverse(mice::pool(x), ...)
 }
-
 
 
 # helper --------------
@@ -747,7 +801,6 @@ link_inverse.mira <- function(x, ...) {
   if (is.null(link)) link <- "log"
 
   if (is.numeric(link)) {
-    # installed?
     check_if_installed("statmod")
     statmod::tweedie(link.power = link)
   } else {

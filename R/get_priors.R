@@ -24,16 +24,13 @@ get_priors <- function(x, ...) {
 }
 
 
-
 # =========================================================================
 # RSTANARM ----------------------------------------------------------------
 # =========================================================================
 
 
-
 #' @export
 get_priors.stanreg <- function(x, verbose = TRUE, ...) {
-  # installed?
   check_if_installed("rstanarm")
 
   ps <- rstanarm::prior_summary(x)
@@ -119,7 +116,6 @@ get_priors.stanreg <- function(x, verbose = TRUE, ...) {
 
 #' @export
 get_priors.stanmvreg <- function(x, ...) {
-  # installed?
   check_if_installed("rstanarm")
 
 
@@ -581,7 +577,6 @@ get_priors.BFBayesFactor <- function(x, ...) {
 
 #' @export
 get_priors.blavaan <- function(x, ...) {
-  # installed?
   check_if_installed("lavaan")
 
 
@@ -616,18 +611,13 @@ get_priors.blavaan <- function(x, ...) {
 }
 
 
-
 #' @export
 get_priors.mcmc.list <- function(x, ...) {
   NULL
 }
 
 
-
-
-
 # Utils -------------------------------------------------------------------
-
 
 
 .is_numeric_character <- function(x) {

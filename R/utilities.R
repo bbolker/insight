@@ -4,15 +4,16 @@
 #' @description Collection of small helper functions. `trim_ws()` is an
 #' efficient function to trim leading and trailing whitespaces from character
 #' vectors or strings. `n_unique()` returns the number of unique values in a
-#' vector. `has_single_value()` is equivalent to `n_unique() == 1` but is faster.
-#' `safe_deparse()` is comparable to `deparse1()`, i.e. it can safely
-#' deparse very long expressions into a single string. `safe_deparse_symbol()`
-#' only deparses a substituted expressions when possible, which can be much faster
-#' than `deparse(substitute())` for those cases where `substitute()` returns no
-#' valid object name.
+#' vector. `has_single_value()` is equivalent to `n_unique() == 1` but is faster
+#' (note the different default for the `remove_na` argument). `safe_deparse()`
+#' is comparable to `deparse1()`, i.e. it can safely deparse very long
+#' expressions into a single string. `safe_deparse_symbol()` only deparses a
+#' substituted expressions when possible, which can be much faster than
+#' `deparse(substitute())` for those cases where `substitute()` returns no valid
+#' object name.
 #'
 #' @param x A (character) vector, or for some functions may also be a data frame.
-#' @param na.rm Logical, if missing values should be removed from the input.
+#' @param remove_na Logical, if missing values should be removed from the input.
 #' @param character_only Logical, if `TRUE` and `x` is a data frame or list,
 #' only processes character vectors.
 #' @param ... Currently not used.
@@ -46,7 +47,7 @@ trim_ws <- function(x, ...) {
 
 #' @export
 trim_ws.default <- function(x, ...) {
-  gsub("^\\s+|\\s+$", "", x, perl = TRUE, useBytes = TRUE)
+  gsub("^\\s+|\\s+$", "", x, useBytes = TRUE)
 }
 
 #' @rdname trim_ws
@@ -77,7 +78,6 @@ trim_ws.list <- function(x, character_only = TRUE, ...) {
 }
 
 
-
 # n_unique ---------------------------------------
 
 #' @rdname trim_ws
@@ -88,24 +88,23 @@ n_unique <- function(x, ...) {
 
 #' @rdname trim_ws
 #' @export
-n_unique.default <- function(x, na.rm = TRUE, ...) {
+n_unique.default <- function(x, remove_na = TRUE, ...) {
   if (is.null(x)) {
     return(0)
   }
-  if (isTRUE(na.rm)) x <- x[!is.na(x)]
+  if (isTRUE(remove_na)) x <- x[!is.na(x)]
   length(unique(x))
 }
 
 #' @export
-n_unique.data.frame <- function(x, na.rm = TRUE, ...) {
-  vapply(x, n_unique, na.rm = na.rm, FUN.VALUE = numeric(1L))
+n_unique.data.frame <- function(x, remove_na = TRUE, ...) {
+  vapply(x, n_unique, remove_na = remove_na, FUN.VALUE = numeric(1L))
 }
 
 #' @export
-n_unique.list <- function(x, na.rm = TRUE, ...) {
-  lapply(x, n_unique, na.rm = na.rm)
+n_unique.list <- function(x, remove_na = TRUE, ...) {
+  lapply(x, n_unique, remove_na = remove_na)
 }
-
 
 
 # safe_deparse ---------------------------------------
@@ -116,9 +115,8 @@ safe_deparse <- function(x, ...) {
   if (is.null(x)) {
     return(NULL)
   }
-  paste0(sapply(deparse(x, width.cutoff = 500), trim_ws, simplify = TRUE), collapse = " ")
+  paste(sapply(deparse(x, width.cutoff = 500), trim_ws, simplify = TRUE), collapse = " ")
 }
-
 
 
 # safe_substitute ---------------------------------------
@@ -131,7 +129,7 @@ safe_deparse_symbol <- function(x) {
   } else {
     out <- NULL
   }
-  return(out)
+  out
 }
 
 
@@ -139,7 +137,7 @@ safe_deparse_symbol <- function(x) {
 
 #' @rdname trim_ws
 #' @export
-has_single_value <- function(x, na.rm = FALSE) {
-  if (na.rm) x <- x[!is.na(x)]
+has_single_value <- function(x, remove_na = FALSE, ...) {
+  if (remove_na) x <- x[!is.na(x)]
   !is.null(x) && length(x) > 0L && isTRUE(all(x == x[1]))
 }

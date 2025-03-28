@@ -8,18 +8,22 @@
 #' @inheritParams find_parameters
 #' @inheritParams find_predictors
 #'
+#' @inheritSection find_predictors Model components
+#'
 #' @return A data frame with three columns: the parameter names, the related
 #'   point estimates and the component.
 #'
-#' @examples
-#' data(mtcars)
-#' m <- lm(mpg ~ wt + cyl + vs, data = mtcars)
+#' @examplesIf requireNamespace("betareg", quietly = TRUE)
+#' data("GasolineYield", package = "betareg")
+#' m <- betareg::betareg(yield ~ batch + temp, data = GasolineYield)
 #' get_parameters(m)
+#' get_parameters(m, component = "precision")
 #' @export
-get_parameters.betareg <- function(x,
-                                   component = c("all", "conditional", "precision", "location", "distributional", "auxiliary"),
-                                   ...) {
-  component <- match.arg(component)
+get_parameters.betareg <- function(x, component = "all", ...) {
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "precision", "location", "distributional", "auxiliary")
+  )
   cf <- stats::coef(x)
 
   params <- data.frame(
@@ -35,6 +39,34 @@ get_parameters.betareg <- function(x,
   }
 
   text_remove_backticks(params)
+}
+
+
+#' @export
+get_parameters.glmgee <- function(x, component = "all", ...) {
+  component <- validate_argument(component, c("all", "conditional", "dispersion"))
+
+  junk <- utils::capture.output({
+    cs <- suppressWarnings(stats::coef(summary(x, corr = FALSE)))
+  })
+  est <- stats::na.omit(cs[, "Estimate"])
+
+  out <- data.frame(
+    Parameter = names(est),
+    Estimate = as.vector(est),
+    Component = "conditional",
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  # mark dispersion parameter
+  out$Component[out$Parameter == "Dispersion"] <- "dispersion"
+
+  if (component != "all") {
+    out <- out[out$Component == component, , drop = FALSE]
+  }
+
+  text_remove_backticks(out)
 }
 
 
@@ -68,17 +100,17 @@ get_parameters.nestedLogit <- function(x, component = "all", verbose = TRUE, ...
 }
 
 
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.DirichletRegModel <- function(x,
-                                             component = c("all", "conditional", "precision", "location", "distributional", "auxiliary"),
-                                             ...) {
-  component <- match.arg(component)
+get_parameters.DirichletRegModel <- function(x, component = "all", ...) {
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "precision", "location", "distributional", "auxiliary")
+  )
   cf <- stats::coef(x)
 
   if (x$parametrization == "common") {
     component <- "all"
-    n_comp <- lapply(cf, length)
+    n_comp <- lengths(cf)
     pattern <- paste0("(", paste(x$varnames, collapse = "|"), ")\\.(.*)")
     p_names <- gsub(pattern, "\\2", names(unlist(cf)))
 
@@ -108,12 +140,9 @@ get_parameters.DirichletRegModel <- function(x,
 }
 
 
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.averaging <- function(x,
-                                     component = c("conditional", "full"),
-                                     ...) {
-  component <- match.arg(component)
+get_parameters.averaging <- function(x, component = "conditional", ...) {
+  component <- validate_argument(component, c("conditional", "full"))
   cf <- stats::coef(x, full = component == "full")
 
   params <- data.frame(
@@ -127,12 +156,12 @@ get_parameters.averaging <- function(x,
 }
 
 
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.glmx <- function(x,
-                                component = c("all", "conditional", "extra", "location", "distributional", "auxiliary"),
-                                ...) {
-  component <- match.arg(component)
+get_parameters.glmx <- function(x, component = "all", ...) {
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "extra", "location", "distributional", "auxiliary")
+  )
   cf <- stats::coef(summary(x))
 
   params <- rbind(
@@ -160,12 +189,9 @@ get_parameters.glmx <- function(x,
 }
 
 
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.clm2 <- function(x,
-                                component = c("all", "conditional", "scale"),
-                                ...) {
-  component <- match.arg(component)
+get_parameters.clm2 <- function(x, component = "all", ...) {
+  component <- validate_argument(component, c("all", "conditional", "scale"))
 
   cf <- stats::coef(summary(x))
   n_intercepts <- length(x$xi)
@@ -192,34 +218,34 @@ get_parameters.clm2 <- function(x,
 get_parameters.clmm2 <- get_parameters.clm2
 
 
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.mvord <- function(x,
-                                 component = c("all", "conditional", "thresholds", "correlation"),
-                                 ...) {
-  component <- match.arg(component)
+get_parameters.mvord <- function(x, component = "all", ...) {
+  component <- validate_argument(
+    component,
+    c("all", "conditional", "thresholds", "correlation")
+  )
   junk <- utils::capture.output(s <- summary(x)) # nolint
   # intercepts thresholds
   thresholds <- as.data.frame(s$thresholds)
   thresholds$Parameter <- rownames(thresholds)
   thresholds$Response <- gsub("(.*)\\s(.*)", "\\1", thresholds$Parameter)
   # coefficients
-  coefficients <- as.data.frame(s$coefficients)
-  coefficients$Parameter <- rownames(coefficients)
-  coefficients$Response <- gsub("(.*)\\s(.*)", "\\2", coefficients$Parameter)
+  model_coef <- as.data.frame(s$coefficients)
+  model_coef$Parameter <- rownames(model_coef)
+  model_coef$Response <- gsub("(.*)\\s(.*)", "\\2", model_coef$Parameter)
 
-  if (!all(coefficients$Response %in% thresholds$Response)) {
+  if (!all(model_coef$Response %in% thresholds$Response)) {
     resp <- unique(thresholds$Response)
-    for (i in coefficients$Response) {
-      coefficients$Response[coefficients$Response == i] <- resp[grepl(paste0(i, "$"), resp)]
+    for (i in model_coef$Response) {
+      model_coef$Response[model_coef$Response == i] <- resp[grepl(paste0(i, "$"), resp)]
     }
   }
 
   params <- data.frame(
-    Parameter = c(thresholds$Parameter, coefficients$Parameter),
-    Estimate = c(unname(thresholds[, "Estimate"]), unname(coefficients[, "Estimate"])),
-    Component = c(rep("thresholds", nrow(thresholds)), rep("conditional", nrow(coefficients))),
-    Response = c(thresholds$Response, coefficients$Response),
+    Parameter = c(thresholds$Parameter, model_coef$Parameter),
+    Estimate = c(unname(thresholds[, "Estimate"]), unname(model_coef[, "Estimate"])),
+    Component = c(rep("thresholds", nrow(thresholds)), rep("conditional", nrow(model_coef))),
+    Response = c(thresholds$Response, model_coef$Response),
     stringsAsFactors = FALSE,
     row.names = NULL
   )
@@ -235,7 +261,7 @@ get_parameters.mvord <- function(x,
 
   params <- rbind(params, params_error)
 
-  if (n_unique(params$Response) == 1) {
+  if (has_single_value(params$Response, remove_na = TRUE)) {
     params$Response <- NULL
   }
 
@@ -247,13 +273,9 @@ get_parameters.mvord <- function(x,
 }
 
 
-
-#' @rdname get_parameters.betareg
 #' @export
-get_parameters.mjoint <- function(x,
-                                  component = c("all", "conditional", "survival"),
-                                  ...) {
-  component <- match.arg(component)
+get_parameters.mjoint <- function(x, component = "all", ...) {
+  component <- validate_argument(component, c("all", "conditional", "survival"))
   s <- summary(x)
 
   params <- rbind(
@@ -281,11 +303,10 @@ get_parameters.mjoint <- function(x,
 }
 
 
-
 #' @export
 get_parameters.systemfit <- function(x, ...) {
   cf <- stats::coef(summary(x))
-  f <- find_formula(x)
+  f <- find_formula(x, verbose = FALSE)
 
   system_names <- names(f)
   parameter_names <- row.names(cf)
@@ -303,6 +324,7 @@ get_parameters.systemfit <- function(x, ...) {
 
   do.call(rbind, out)
 }
+
 
 #' @export
 get_parameters.marginaleffects <- function(x, summary = FALSE, merge_parameters = FALSE, ...) {
@@ -368,7 +390,8 @@ get_parameters.deltaMethod <- function(x, ...) {
 
 #' @export
 get_parameters.ggcomparisons <- function(x, merge_parameters = FALSE, ...) {
-  estimate_pos <- which(colnames(x) == attr(x, "estimate_name"))
+  estimate_name <- intersect(colnames(x), c(attr(x, "coef_name"), "Difference", "Mean", "Ratio"))[1]
+  estimate_pos <- which(colnames(x) == estimate_name)
   params <- x[, seq_len(estimate_pos - 1), drop = FALSE]
 
   if (isTRUE(merge_parameters) && ncol(params) > 1L) {
@@ -391,4 +414,54 @@ get_parameters.ggcomparisons <- function(x, merge_parameters = FALSE, ...) {
     }
   }
   text_remove_backticks(out)
+}
+
+
+#' @export
+get_parameters.coxph <- function(x, verbose = TRUE, ...) {
+  cf <- stats::coef(summary(x))
+  params <- rownames(cf)
+  if (is.null(params)) {
+    params <- paste(seq_along(cf))
+  }
+
+  params <- data.frame(
+    Parameter = params,
+    Estimate = unname(cf[, 1]),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  text_remove_backticks(params)
+}
+
+
+#' @export
+get_parameters.asym <- function(x, verbose = TRUE, ...) {
+  cf <- stats::coef(x)
+  params <- data.frame(
+    Parameter = names(cf),
+    Estimate = unname(cf),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  params$Parameter <- gsub("^plus__", "+", params$Parameter)
+  params$Parameter <- gsub("^minus__", "-", params$Parameter)
+
+  text_remove_backticks(params)
+}
+
+
+#' @export
+get_parameters.oohbchoice <- function(x, verbose = TRUE, ...) {
+  cf <- stats::coef(x)
+  params <- data.frame(
+    Parameter = names(cf),
+    Estimate = unname(cf),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  text_remove_backticks(params)
 }

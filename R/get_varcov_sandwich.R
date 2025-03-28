@@ -7,34 +7,8 @@
                                  ...) {
   dots <- list(...)
 
-  ## TODO: remove deprecated warnings in a future update
-
-  # deprecated
-  if (isTRUE(verbose) && "vcov_type" %in% names(dots)) {
-    format_warning("The `vcov_type` argument is superseded by the `vcov_args` argument.")
-  }
-  if (isTRUE(verbose) && "robust" %in% names(dots)) {
-    format_warning("The `robust` argument is superseded by the `vcov` argument.")
-  }
-
   if (is.null(vcov_args)) {
     vcov_args <- list()
-  }
-
-  # deprecated: `vcov_estimation`
-  if (is.null(vcov_fun) && "vcov_estimation" %in% names(dots)) {
-    vcov_fun <- dots[["vcov_estimation"]]
-  }
-
-  # deprecated: `robust`
-  if (isTRUE(dots[["robust"]]) && is.null(vcov_fun)) {
-    dots[["robust"]] <- NULL
-    vcov_fun <- "HC3"
-  }
-
-  # deprecated: `vcov_type`
-  if ("vcov_type" %in% names(dots) && !"type" %in% names(vcov_args)) {
-    vcov_args[["type"]] <- dots[["vcov_type"]]
   }
 
   # vcov_fun is a matrix
@@ -45,21 +19,23 @@
   # vcov_fun is a function
   if (is.function(vcov_fun)) {
     if (is.null(vcov_args) || !is.list(vcov_args)) {
-      args <- list(x)
+      my_args <- list(x)
     } else {
-      args <- c(list(x), vcov_args)
+      my_args <- c(list(x), vcov_args)
     }
-    .vcov <- do.call("vcov_fun", args)
+    .vcov <- do.call("vcov_fun", my_args)
     return(.vcov)
   }
 
+  vcov_type_shortcuts <- c(
+    "HC0", "HC1", "HC2", "HC3", "HC4", "HC4m", "HC5", "CR0", "CR1",
+    "CR1p", "CR1S", "CR2", "CR3", "xy", "residual", "wild", "mammen",
+    "webb", "fractional", "jackknife", "norm"
+  )
+
   # type shortcuts: overwrite only if not supplied explicitly by the user
   if (!"type" %in% names(vcov_args)) {
-    if (isTRUE(vcov_fun %in% c(
-      "HC0", "HC1", "HC2", "HC3", "HC4", "HC4m", "HC5",
-      "CR0", "CR1", "CR1p", "CR1S", "CR2", "CR3", "xy",
-      "residual", "wild", "mammen", "webb"
-    ))) {
+    if (isTRUE(vcov_fun %in% vcov_type_shortcuts)) {
       vcov_args[["type"]] <- vcov_fun
     } else if (is.null(vcov_fun)) {
       # set defaults
@@ -99,6 +75,9 @@
       CR = "vcovCR",
       xy = ,
       residual = ,
+      norm = ,
+      jackknife = ,
+      fractional = ,
       wild = ,
       mammen = ,
       webb = ,

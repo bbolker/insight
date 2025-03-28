@@ -28,6 +28,8 @@
 #' Returns `NULL` if no terms could be found (for instance, due to
 #' problems in accessing the formula).
 #'
+#' @inheritSection find_predictors Parameters, Variables, Predictors and Terms
+#'
 #' @note The difference to [`find_variables()`] is that `find_terms()`
 #'   may return a variable multiple times in case of multiple transformations
 #'   (see examples below), while `find_variables()` returns each variable
@@ -52,7 +54,11 @@ find_terms <- function(x, ...) {
 
 #' @rdname find_terms
 #' @export
-find_terms.default <- function(x, flatten = FALSE, as_term_labels = FALSE, verbose = TRUE, ...) {
+find_terms.default <- function(x,
+                               flatten = FALSE,
+                               as_term_labels = FALSE,
+                               verbose = TRUE,
+                               ...) {
   f <- find_formula(x, verbose = verbose)
 
   if (is.null(f)) {
@@ -67,9 +73,9 @@ find_terms.default <- function(x, flatten = FALSE, as_term_labels = FALSE, verbo
   resp <- find_response(x, verbose = FALSE)
 
   if (is_multivariate(f) || isTRUE(attributes(f)$two_stage)) {
-    l <- lapply(f, .get_variables_list, resp = resp)
+    l <- lapply(f, .get_variables_list, resp = resp, model = x)
   } else {
-    l <- .get_variables_list(f, resp)
+    l <- .get_variables_list(f, resp, model = x)
   }
 
   if (flatten) {
@@ -92,7 +98,6 @@ find_terms.default <- function(x, flatten = FALSE, as_term_labels = FALSE, verbo
 
   compact_list(c(list(response = response), out))
 }
-
 
 
 #' @export
@@ -163,11 +168,10 @@ find_terms.mipo <- function(x, flatten = FALSE, ...) {
 }
 
 
-
 # helper -----------------------
 
 
-.get_variables_list <- function(f, resp = NULL) {
+.get_variables_list <- function(f, resp = NULL, model = NULL) {
   # exception for formula w/o response
   if (is.null(resp) || !is_empty_object(resp)) {
     f$response <- sub("(.*)::(.*)", "\\2", safe_deparse(f$conditional[[2L]]))
@@ -179,14 +183,18 @@ find_terms.mipo <- function(x, flatten = FALSE, ...) {
   f <- lapply(f, function(.x) {
     if (is.list(.x)) {
       .x <- vapply(.x, .formula_to_string, character(1))
-    } else {
-      if (!is.character(.x)) .x <- safe_deparse(.x)
+    } else if (!is.character(.x)) {
+      .x <- safe_deparse(.x)
     }
     .x
   })
 
+  # save original response
+  original_response <- f$response
+
   # protect "-1"
   f$conditional <- gsub("(-1|- 1)(?![^(]*\\))", "#1", f$conditional, perl = TRUE)
+  f$response <- gsub("(-1|- 1)(?![^(]*\\))", "#1", f$response, perl = TRUE)
 
   # This regular expression matches any of the characters *, +, :, |, -, or /,
   # unless they are preceded by a ^ and followed by a closing parenthesis ).
@@ -198,12 +206,24 @@ find_terms.mipo <- function(x, flatten = FALSE, ...) {
     )), fixed = TRUE)
     # if user has used namespace in formula-functions, these are returned
     # as empty elements. remove those here
-    if (any(nchar(f_parts) == 0)) {
-      f_parts <- f_parts[-which(nchar(f_parts) == 0)]
+    if (!all(nzchar(f_parts, keepNA = TRUE))) {
+      f_parts <- f_parts[-which(!nzchar(f_parts, keepNA = TRUE))]
     }
     text_remove_backticks(unique(f_parts))
   })
 
+  # exceptions where we want to preserve the response value come here
+  # - lm(1 / Sepal.Length ~ Species, data = iris)
+  if (!is.null(original_response) && !is_empty_object(original_response) && startsWith(original_response, "1/")) { # nolint
+    f$response <- original_response
+  }
+
+  # for brms-models, we need to remove "Intercept", which is a special notation
+  if (inherits(model, "brmsfit")) {
+    f <- lapply(f, function(i) {
+      compact_character(gsub("\\QIntercept\\E", "", i))
+    })
+  }
 
   # remove "1" and "0" from variables in random effects
 
@@ -225,7 +245,9 @@ find_terms.mipo <- function(x, flatten = FALSE, ...) {
       trim_ws(unlist(strsplit(f$conditional[need_split], " ", fixed = TRUE), use.names = FALSE))
     )
   }
+
   f$conditional <- gsub("#1", "-1", f$conditional, fixed = TRUE)
+  f$response <- gsub("#1", "-1", f$response, fixed = TRUE)
 
   # reorder, so response is first
   compact_list(f[c(length(f), 1:(length(f) - 1))])
@@ -240,7 +262,7 @@ find_terms.mipo <- function(x, flatten = FALSE, ...) {
   error <- utils::capture.output(print(f[[3]][i][[1]]))
   f[[3]][i] <- NULL
   f[[3]] <- f[[3]][[2]]
-  f[[3]] <- as.name(paste0(attr(stats::terms.formula(f), "term.labels"), collapse = "+"))
+  f[[3]] <- as.name(paste(attr(stats::terms.formula(f), "term.labels"), collapse = "+"))
 
   l <- .get_variables_list(f, resp)
   names(l) <- c("response", "conditional")

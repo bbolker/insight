@@ -92,7 +92,7 @@ get_predicted.gam <- function(x,
   } else {
     ci_data <- NULL
   }
-  out <- .get_predicted_transform(x, predictions, my_args, ci_data, verbose = verbose)
+  out <- .get_predicted_transform(x, predictions, my_args, ci_data, verbose = verbose, ...)
   .get_predicted_out(out$predictions, my_args = my_args, ci_data = out$ci_data)
 }
 
@@ -104,8 +104,6 @@ get_predicted.Gam <- get_predicted.gam
 
 #' @export
 get_predicted.list <- get_predicted.gam # gamm4
-
-
 
 
 # GAMLSS -----------------------------------------------------------------
